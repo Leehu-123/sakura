@@ -1,0 +1,19 @@
+# TEMPLATE ONLY. Copy to .local/offsite/rclone.conf during account connection.
+# Enter real credentials locally, never in chat or in this tracked template.
+# Google OAuth: create your own Desktop OAuth client; complete rclone config in a browser.
+[sakura_drive]
+type = drive
+scope = drive.file
+client_id = REPLACE_LOCALLY
+client_secret = REPLACE_LOCALLY
+# token is written by the interactive OAuth flow, not supplied in this template.
+
+[sakura_r2]
+type = s3
+provider = Cloudflare
+access_key_id = REPLACE_LOCALLY
+secret_access_key = REPLACE_LOCALLY
+endpoint = https://ACCOUNT_ID.r2.cloudflarestorage.com
+region = auto
+no_check_bucket = true
+storage_class = STANDARD

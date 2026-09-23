@@ -1,0 +1,26 @@
+[Unit]
+Description=Sakura API
+After=network.target sakura-db.service
+Requires=sakura-db.service
+
+[Service]
+User=sakura
+Group=sakura
+Slice=sakura.slice
+WorkingDirectory=/srv/sakura/current
+EnvironmentFile=/srv/sakura/shared/app.env
+Environment=NODE_OPTIONS=--max-old-space-size=176
+ExecStart=/opt/sakura/node/bin/node apps/platform-api/dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+MemoryMax=272M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/sakura/shared/media
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

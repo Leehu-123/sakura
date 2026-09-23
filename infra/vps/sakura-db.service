@@ -1,0 +1,26 @@
+[Unit]
+Description=Sakura private PostgreSQL
+After=network.target
+
+[Service]
+User=sakura-db
+Group=sakura-db
+Slice=sakura.slice
+RuntimeDirectory=sakura-pg
+RuntimeDirectoryMode=0700
+ExecStart=/opt/sakura/postgres-package/native/bin/postgres -D /srv/sakura/database
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGINT
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=5
+MemoryMax=192M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/sakura/database /run/sakura-pg
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

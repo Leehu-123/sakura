@@ -1,0 +1,20 @@
+{
+  "name": "@sakura/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.seed.json",
+    "migrate": "dotenv -e ../../.env -- prisma migrate deploy",
+    "seed": "dotenv -e ../../.env -- node dist-seed/packages/database/prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  },
+  "devDependencies": {
+    "prisma": "6.19.3",
+    "dotenv-cli": "^10.0.0"
+  }
+}

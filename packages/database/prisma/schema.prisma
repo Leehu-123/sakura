@@ -1,0 +1,609 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccessScope {
+  GLOBAL
+  ASSIGNED
+  SELF
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id                 String               @id @default(uuid()) @db.Uuid
+  email              String               @unique
+  displayName        String
+  passwordHash       String
+  status             UserStatus           @default(ACTIVE)
+  mustChangePassword Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  employee           Employee?
+  roleAssignments    UserRoleAssignment[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  createdCustomers   Customer[]           @relation("CustomerCreator")
+  ownedCustomers     CustomerAssignment[] @relation("CustomerOwner")
+  assignedCustomers  CustomerAssignment[] @relation("CustomerAssigner")
+  careActivities     CareActivity[]
+  createdOrders      Order[]              @relation("OrderCreator")
+  closedOrders       Order[]              @relation("OrderCloser")
+  orderHistory       OrderHistory[]
+  importBatches      ImportBatch[]
+  chatMessages       ChatMessage[]
+  chatTeamMemberships ChatTeamMember[]
+  chatShifts          ChatShift[]
+  supportedChats     ChatConversation[]
+  chatReads          ChatRead[]
+  deliverySlips      DeliverySlip[]
+}
+
+model Session {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @db.Uuid
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime       @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  tokens    RefreshToken[]
+
+  @@index([userId, revokedAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique
+  sessionId String    @db.Uuid
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([sessionId])
+}
+
+model Application {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  name        String
+  permissions Permission[]
+}
+
+model Permission {
+  id            String           @id @default(uuid()) @db.Uuid
+  code          String           @unique
+  name          String
+  allowedScopes AccessScope[]
+  applicationId String           @db.Uuid
+  application   Application      @relation(fields: [applicationId], references: [id])
+  roles         RolePermission[]
+}
+
+model Role {
+  id          String               @id @default(uuid()) @db.Uuid
+  code        String               @unique
+  name        String
+  description String               @default("")
+  isSystem    Boolean              @default(false)
+  permissions RolePermission[]
+  assignments UserRoleAssignment[]
+  createdAt   DateTime             @default(now())
+}
+
+model RolePermission {
+  roleId       String      @db.Uuid
+  permissionId String      @db.Uuid
+  scope        AccessScope
+  role         Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission  @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRoleAssignment {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Region {
+  customers Customer[]
+  id        String     @id @default(uuid()) @db.Uuid
+  code      String     @unique
+  name      String
+  employees Employee[]
+}
+
+model Department {
+  id        String     @id @default(uuid()) @db.Uuid
+  code      String     @unique
+  name      String
+  employees Employee[]
+}
+
+model Branch {
+  id        String     @id @default(uuid()) @db.Uuid
+  code      String     @unique
+  name      String
+  employees Employee[]
+}
+
+model Employee {
+  id           String      @id @default(uuid()) @db.Uuid
+  code         String      @unique
+  fullName     String
+  userId       String?     @unique @db.Uuid
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  departmentId String?     @db.Uuid
+  department   Department? @relation(fields: [departmentId], references: [id])
+  branchId     String?     @db.Uuid
+  branch       Branch?     @relation(fields: [branchId], references: [id])
+  regionId     String?     @db.Uuid
+  region       Region?     @relation(fields: [regionId], references: [id])
+  createdAt    DateTime    @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String?  @db.Uuid
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+}
+
+enum CustomerStatus {
+  NEW
+  CONSULTING
+  WON
+  RETURNING
+  INACTIVE
+}
+
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum ShippingStatus {
+  NOT_CREATED
+  WAITING_PICKUP
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+  CANCELLED
+}
+
+model Customer {
+  sourceData       Json?
+  id               String               @id @default(uuid()) @db.Uuid
+  name             String
+  phone            String?              @unique
+  address          String               @default("")
+  status           CustomerStatus       @default(NEW)
+  regionId         String?              @db.Uuid
+  region           Region?              @relation(fields: [regionId], references: [id])
+  version          Int                  @default(1)
+  createdById      String               @db.Uuid
+  createdBy        User                 @relation("CustomerCreator", fields: [createdById], references: [id])
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  assignments      CustomerAssignment[]
+  activities       CareActivity[]
+  orders           Order[]
+  historicalOrders HistoricalOrder[]
+  conversations    ChatConversation[]
+
+  @@index([createdAt, id])
+}
+
+model CustomerAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  customerId   String    @db.Uuid
+  customer     Customer  @relation(fields: [customerId], references: [id])
+  userId       String    @db.Uuid
+  user         User      @relation("CustomerOwner", fields: [userId], references: [id])
+  assignedById String    @db.Uuid
+  assignedBy   User      @relation("CustomerAssigner", fields: [assignedById], references: [id])
+  reason       String
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+
+  @@index([userId, endedAt, customerId])
+}
+
+model CareActivity {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @db.Uuid
+  customer   Customer @relation(fields: [customerId], references: [id])
+  authorId   String   @db.Uuid
+  author     User     @relation(fields: [authorId], references: [id])
+  note       String
+  createdAt  DateTime @default(now())
+
+  @@index([customerId, createdAt])
+}
+
+model Product {
+  sourceData  Json?
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  category    String           @default("")
+  description String           @default("")
+  isActive    Boolean          @default(true)
+  version     Int              @default(1)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  variants    ProductVariant[]
+  images      ProductImage[]
+
+  @@index([name])
+}
+
+model ProductVariant {
+  sourceData Json?
+  id         String         @id @default(uuid()) @db.Uuid
+  productId  String         @db.Uuid
+  product    Product        @relation(fields: [productId], references: [id])
+  sku        String         @unique
+  name       String
+  unit       String
+  price      Decimal        @db.Decimal(18, 0)
+  isActive   Boolean        @default(true)
+  version    Int            @default(1)
+  orderItems OrderItem[]
+  images     ProductImage[]
+}
+
+model Order {
+  requestKey      String         @unique @db.Uuid
+  requestHash     String
+  id              String         @id @default(uuid()) @db.Uuid
+  number          Int            @unique @default(autoincrement())
+  customerId      String         @db.Uuid
+  customer        Customer       @relation(fields: [customerId], references: [id])
+  createdById     String         @db.Uuid
+  createdBy       User           @relation("OrderCreator", fields: [createdById], references: [id])
+  closedByUserId  String?        @db.Uuid
+  closedBy        User?          @relation("OrderCloser", fields: [closedByUserId], references: [id], onDelete: Restrict)
+  closedAt        DateTime?
+  status          OrderStatus    @default(DRAFT)
+  paymentStatus   PaymentStatus  @default(UNPAID)
+  shippingStatus  ShippingStatus @default(NOT_CREATED)
+  recipientName   String
+  recipientPhone  String
+  shippingAddress String
+  carrierName     String @default("")
+  trackingCode    String @default("")
+  note            String         @default("")
+  subtotal        Decimal        @db.Decimal(18, 0)
+  discount        Decimal        @db.Decimal(18, 0)
+  shippingFee     Decimal        @db.Decimal(18, 0)
+  total           Decimal        @db.Decimal(18, 0)
+  paidAmount      Decimal        @default(0) @db.Decimal(18, 0)
+  version         Int            @default(1)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  items           OrderItem[]
+  history         OrderHistory[]
+  deliverySlip    DeliverySlip?
+  chatMessages    ChatMessage[]
+
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id          String         @id @default(uuid()) @db.Uuid
+  orderId     String         @db.Uuid
+  order       Order          @relation(fields: [orderId], references: [id])
+  variantId   String         @db.Uuid
+  variant     ProductVariant @relation(fields: [variantId], references: [id])
+  productName String
+  variantName String
+  sku         String
+  unit        String
+  unitPrice   Decimal        @db.Decimal(18, 0)
+  quantity    Int
+  lineTotal   Decimal        @db.Decimal(18, 0)
+
+  @@unique([orderId, variantId])
+}
+
+model OrderHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  order     Order    @relation(fields: [orderId], references: [id])
+  actorId   String   @db.Uuid
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  note      String
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model ImportBatch {
+  id          String    @id @default(uuid()) @db.Uuid
+  actorId     String    @db.Uuid
+  actor       User      @relation(fields: [actorId], references: [id])
+  kind        String
+  fileName    String
+  rows        Json
+  plan        Json
+  digest      String
+  status      String    @default("PREVIEW")
+  createdAt   DateTime  @default(now())
+  committedAt DateTime?
+
+  @@index([createdAt])
+}
+
+model SapoReference {
+  id          String @id @default(uuid()) @db.Uuid
+  kind        String
+  externalId  String
+  targetId    String @db.Uuid
+  fingerprint String
+
+  @@unique([kind, externalId])
+}
+
+model HistoricalOrder {
+  sourceData           Json?
+  id                   String    @id @default(uuid()) @db.Uuid
+  externalId           String    @unique
+  number               String
+  customerId           String?   @db.Uuid
+  customer             Customer? @relation(fields: [customerId], references: [id])
+  sourceCustomerName   String    @default("")
+  sourceCreatedBy      String    @default("")
+  sourceChannel        String    @default("")
+  linkMethod           String    @default("SOURCE_ID")
+  sourceStatus         String
+  sourcePaymentStatus  String
+  sourceShippingStatus String
+  sourceClosedBy       String
+  orderedAt            DateTime
+  recipientName        String
+  recipientPhone       String
+  shippingAddress      String
+  subtotal             Decimal?  @db.Decimal(18, 0)
+  discount             Decimal?  @db.Decimal(18, 0)
+  shippingFee          Decimal?  @db.Decimal(18, 0)
+  total                Decimal   @db.Decimal(18, 0)
+  paidAmount           Decimal?  @db.Decimal(18, 0)
+  items                Json
+  importedAt           DateTime  @default(now())
+
+  @@index([customerId, orderedAt])
+}
+
+model ChatConversation {
+  id             String        @id @default(uuid()) @db.Uuid
+  pageId         String
+  psid           String
+  customerId     String?       @db.Uuid
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  tags           String[]      @default([])
+  taggedDate     String?
+  facebookName   String?
+  avatarKey      String?
+  avatarMime     String?
+  avatarBytes    Int?
+  profileCheckedAt DateTime?
+  profileState   String @default("PENDING")
+  attachments    ChatAttachment[]
+  version        Int           @default(1)
+  lastInboundAt  DateTime?
+  lastActivityAt DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  messages       ChatMessage[]
+  supportUserId  String?       @db.Uuid
+  supportUser    User?         @relation(fields: [supportUserId], references: [id])
+  blocked        Boolean       @default(false)
+  blockReason    String        @default("")
+  inboundSeq     Int           @default(0)
+  lastSentAt     DateTime?
+  reads          ChatRead[]
+  teamId         String?       @db.Uuid
+  team           ChatTeam?     @relation(fields: [teamId], references: [id])
+  supportShiftId String?       @db.Uuid
+  supportShift   ChatShift?    @relation(fields: [supportShiftId], references: [id])
+  workState      String        @default("WAITING")
+
+  @@unique([pageId, psid])
+  @@index([customerId, lastActivityAt])
+  @@index([teamId, workState, lastActivityAt])
+}
+
+model ChatMessage {
+  imported        Boolean @default(false)
+  id              String           @id @default(uuid()) @db.Uuid
+  conversationId  String           @db.Uuid
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id])
+  actorId         String?          @db.Uuid
+  actor           User?            @relation(fields: [actorId], references: [id])
+  shiftId         String?          @db.Uuid
+  shift           ChatShift?       @relation(fields: [shiftId], references: [id])
+  remoteKey       String?          @unique
+  requestKey      String?          @unique @db.Uuid
+  direction       String
+  state           String
+  text            String
+  attachmentTypes String[]         @default([])
+  imageId         String?          @db.Uuid
+  image           ProductImage?    @relation(fields: [imageId], references: [id])
+  attachmentId    String?          @db.Uuid
+  attachment      ChatAttachment?  @relation(fields: [attachmentId], references: [id])
+  orderId         String?          @db.Uuid
+  order           Order?           @relation(fields: [orderId], references: [id])
+  orderVersion    Int?
+  snapshot        Json?
+  sourceAt        DateTime
+  createdAt       DateTime         @default(now())
+
+  @@index([conversationId, sourceAt, id])
+  @@index([direction, createdAt])
+  @@index([direction, sourceAt, id])
+  @@index([actorId, direction, sourceAt, id])
+  @@index([shiftId, sourceAt])
+}
+
+model ChatHistoryImport {
+  pageId String @id
+  cursor Json @default("{}")
+  complete Boolean @default(false)
+  importedMessages Int @default(0)
+  conversations Int @default(0)
+  leaseUntil DateTime?
+  leaseToken String?
+  updatedAt DateTime @updatedAt
+}
+
+model ChatTeam {
+  id            String @id @default(uuid()) @db.Uuid
+  name          String
+  version       Int @default(1)
+  isActive      Boolean @default(true)
+  members       ChatTeamMember[]
+  pages         ChatTeamPage[]
+  shifts        ChatShift[]
+  conversations ChatConversation[]
+}
+model ChatTeamMember {
+  teamId String @db.Uuid
+  userId String @db.Uuid
+  team ChatTeam @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  @@id([teamId, userId])
+  @@index([userId])
+}
+model ChatTeamPage {
+  pageId String @id
+  teamId String @db.Uuid
+  team ChatTeam @relation(fields: [teamId], references: [id])
+  @@index([teamId])
+}
+model ChatShift {
+  id String @id @default(uuid()) @db.Uuid
+  teamId String @db.Uuid
+  userId String @db.Uuid
+  label String
+  startedAt DateTime @default(now())
+  endedAt DateTime?
+  endNote String @default("")
+  team ChatTeam @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  conversations ChatConversation[]
+  messages ChatMessage[]
+  @@index([teamId, endedAt])
+  @@index([userId, startedAt])
+}
+
+model ChatTemplate {
+  id       String  @id @default(uuid()) @db.Uuid
+  title    String
+  text     String
+  isActive Boolean @default(true)
+  version  Int     @default(1)
+}
+
+model ChatRead {
+  conversationId String           @db.Uuid
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String           @db.Uuid
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readSeq        Int              @default(0)
+  unread         Boolean          @default(false)
+
+  @@id([conversationId, userId])
+}
+
+model ProductImage {
+  id        String          @id @default(uuid()) @db.Uuid
+  productId String          @db.Uuid
+  product   Product         @relation(fields: [productId], references: [id])
+  variantId String?         @db.Uuid
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  title     String
+  mime      String
+  data      String          @default("")
+  storageKey String?
+  byteSize   Int?
+  sourceKey  String?        @unique
+  sourceUrl  String?
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  messages  ChatMessage[]
+
+  @@index([productId, createdAt])
+}
+
+model MessengerConfiguration {
+  id        Int      @id
+  version   Int      @default(1)
+  config    Json
+  updatedAt DateTime @updatedAt
+}
+
+model ChatToolbar {
+  id      Int @id
+  version Int @default(1)
+  days    Int @default(8)
+  labels  Json
+}
+
+model ChatAttachment {
+  id             String @id @default(uuid()) @db.Uuid
+  conversationId String @db.Uuid
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id])
+  createdById    String @db.Uuid
+  title          String
+  mime           String
+  kind           String
+  storageKey     String
+  byteSize       Int
+  createdAt      DateTime @default(now())
+  messages       ChatMessage[]
+  @@index([conversationId, createdAt])
+}
+
+model DeliverySlip {
+  id                String    @id @default(uuid()) @db.Uuid
+  orderId           String    @unique @db.Uuid
+  order             Order     @relation(fields: [orderId], references: [id])
+  createdById       String    @db.Uuid
+  createdBy         User      @relation(fields: [createdById], references: [id])
+  snapshot          Json
+  revision          Int       @default(1)
+  previousSnapshots Json      @default("[]")
+  voidedAt          DateTime?
+  createdAt         DateTime  @default(now())
+}

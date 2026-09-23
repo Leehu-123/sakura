@@ -1,0 +1,56 @@
+{
+  "name": "sakura-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "setup:env": "node scripts/setup-env.mjs",
+    "setup:fanpage-key": "node scripts/setup-messenger-key.cjs",
+    "db:generate": "npm run generate -w @sakura/database",
+    "db:migrate": "npm run migrate -w @sakura/database",
+    "db:seed": "npm run seed -w @sakura/database",
+    "build": "npm run build -w @sakura/database && npm run build -w @sakura/platform-api && npm run build -w @sakura/worker && npm run build -w @sakura/sale-web",
+    "test": "npm run test -w @sakura/platform-api",
+    "test:integration": "npm run test:integration -w @sakura/platform-api",
+    "dev:api": "npm run dev -w @sakura/platform-api",
+    "dev:web": "npm run dev -w @sakura/sale-web",
+    "start:web:local": "node scripts/local-web.cjs",
+    "dev:worker": "npm run dev -w @sakura/worker",
+    "dev:db": "node scripts/local-db.mjs",
+    "backup:create": "node --env-file=.env scripts/ops/backup.cjs create",
+    "backup:verify": "node --env-file=.env scripts/ops/backup.cjs verify",
+    "backup:drill": "node --env-file=.env scripts/ops/backup.cjs drill",
+    "backup:offsite:init": "node --env-file=.env scripts/ops/offsite.cjs init",
+    "backup:offsite:prepare": "node --env-file=.env scripts/ops/offsite.cjs prepare",
+    "backup:offsite:upload": "node --env-file=.env scripts/ops/offsite.cjs upload",
+    "backup:offsite:run": "node --env-file=.env scripts/ops/offsite.cjs run",
+    "backup:offsite:local-drill": "node --env-file=.env scripts/ops/offsite.cjs local-drill",
+    "backup:offsite:restore-drill": "node --env-file=.env scripts/ops/offsite.cjs restore-drill",
+    "storage:check": "node --env-file=.env scripts/ops/storage-check.cjs",
+    "deploy:prepare": "node scripts/ops/deployment.cjs prepare",
+    "deploy:check": "node scripts/ops/deployment.cjs check",
+    "test:deployment": "node --test scripts/ops/deployment.test.cjs scripts/ops/caddy.integration.cjs",
+    "test:ops": "node --test scripts/ops/*.test.cjs",
+    "test:ops:integration": "node --env-file=.env --test scripts/ops/backup.integration.cjs",
+    "sync:check": "node scripts/ops/source-sync.cjs check",
+    "sync:package": "node scripts/ops/source-sync.cjs package",
+    "sync:verify": "node scripts/ops/source-sync.cjs verify"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "embedded-postgres": "^17.9.0-beta.16",
+    "pg": "^8.16.3",
+    "prettier": "^3.9.6",
+    "tsc-watch": "^7.2.1",
+    "typescript": "~5.9.3"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
+  }
+}

@@ -1,0 +1,64 @@
+NHẬP DỮ LIỆU SAPO VÀO SAKURA
+
+Dùng menu “Nhập dữ liệu Sapo” với quyền Nhập dữ liệu Sapo (mặc định chỉ Quản trị viên).
+File mẫu chỉ có tiêu đề. Thêm dữ liệu của bạn, giữ cột mã và điện thoại ở dạng văn bản.
+File .xlsx/.xls cần xuất CSV UTF-8 trước. Chấp nhận dấu phẩy, chấm phẩy hoặc tab.
+Tối đa 200 dòng dữ liệu, 60 cột, 500 KB mỗi file. Mỗi ô tối đa 2.000 ký tự.
+Số dòng trong bản xem trước là thứ tự bản ghi CSV, tính tiêu đề là 1; bỏ qua dòng trống.
+Ghép cột nguồn vào trường tương ứng; tiêu đề có thể khác tên trong mẫu.
+
+1. KHÁCH HÀNG — customers.csv
+externalId: mã khách ổn định từ Sapo, không dùng số thứ tự dòng.
+name: tên khách, tối đa 150 ký tự.
+phone: số Việt Nam, giữ số 0 đầu; +84/0084 được chuẩn hóa thành 0.
+address: địa chỉ, tối đa 1.000 ký tự; có thể bỏ trống.
+ownerEmail: email tài khoản Sakura đã tạo, đang hoạt động, có quyền xem/chăm sóc khách.
+regionCode: NORTH hoặc SOUTH (hoặc mã khu vực đã tạo); không bắt buộc, không cấp quyền xem.
+Khách nhập mới được phân loại “Khách cũ”. Mỗi khách có một điện thoại và một Sale phụ trách.
+
+2. SẢN PHẨM — products.csv
+Mỗi dòng là một biến thể.
+externalId: mã biến thể Sapo; productId: mã sản phẩm Sapo.
+productName, category phải thống nhất giữa các biến thể cùng productId.
+sku: mã hàng duy nhất, 2–50 ký tự chữ/số/gạch ngang/gạch dưới, được viết hoa; variantName: tên biến thể; unit: đơn vị.
+price: giá bán hiện tại bằng đồng, số nguyên không âm, không dấu phân cách.
+category không bắt buộc.
+Nhập mới tạo sản phẩm/biến thể đang bán. Có thể bổ sung biến thể vào cùng mã sản phẩm đã nhập.
+Sản phẩm/SKU đã có nhưng chưa liên kết Sapo sẽ báo lỗi để đối chiếu, không tự gộp.
+
+3. ĐƠN CŨ — orders.csv
+Nhập khách trước. Một đơn có thể nhiều dòng; giữ toàn bộ dòng của mỗi đơn trong cùng file.
+externalId: mã đơn Sapo; number: số đơn để hiển thị; customerId: mã khách Sapo đã nhập.
+orderedAt: YYYY-MM-DD (00:00 giờ Việt Nam) hoặc ISO có múi giờ,
+ví dụ 2020-02-29T09:30:00+07:00. Không tự đoán ngày dd/MM/yyyy.
+sourceStatus, sourcePaymentStatus, sourceShippingStatus: giữ nguyên trạng thái nguồn.
+sourceClosedBy: người chốt theo nguồn; nếu không có để trống, hệ thống cảnh báo và không suy đoán.
+recipientName, recipientPhone, shippingAddress: thông tin tại thời điểm bán.
+sku, productName, unit: thông tin hàng tại lúc bán; không cần khớp danh mục hiện tại.
+quantity, unitPrice, lineTotal: số lượng, đơn giá, thành tiền dòng; lineTotal = quantity × unitPrice.
+subtotal, discount, shippingFee, total, paidAmount: các tổng theo đơn, lặp giống nhau trên mọi dòng.
+subtotal = tổng lineTotal; total = subtotal - discount + shippingFee.
+Tất cả tiền là số nguyên VND không dấu phân cách; không nhận số âm hoặc paidAmount > total.
+Ví dụ: 2 × 45000 = 90000; giảm 10000; phí 20000; tổng 100000; đã thu 100000.
+Nếu nguồn có giảm giá từng dòng, thuế, đổi/hoàn hoặc giá lẻ cần đối chiếu/chuẩn hóa trước.
+Không tự gộp hai dòng cùng SKU; xử lý dòng trùng trong file nguồn trước.
+Đơn cũ chỉ tra cứu trong “Đơn cũ Sapo” và hồ sơ khách. Không chốt lại, thu tiền, tạo vận đơn hay gửi tin.
+Các trạng thái gốc là văn bản lịch sử, chưa quy đổi để làm báo cáo tổng hợp.
+
+XEM TRƯỚC VÀ XÁC NHẬN
+Chọn file → ghép cột → kiểm tra → đọc từng lỗi/cảnh báo/dòng bỏ qua → xác nhận.
+Xem trước chỉ lưu bản kiểm tra, chưa tạo khách, sản phẩm hay đơn.
+Một lỗi chặn toàn bộ lần nhập. Sửa file gốc và tải lại; không có nhập một phần.
+Nội dung cùng mã Sapo giống lần nhập trước sẽ bỏ qua. Nội dung khác báo lỗi, không ghi đè.
+Số điện thoại/SKU trùng bản ghi chưa liên kết phải đối chiếu thủ công; chưa có màn hình gộp/liên kết.
+Bản xem trước hết hạn sau 24 giờ. Nếu dữ liệu liên quan thay đổi phải kiểm tra lại.
+Xác nhận thành công được ghi nhật ký; bấm lại cùng lần nhập không tạo trùng.
+Các bản kiểm tra chứa dữ liệu cá nhân và chỉ người có quyền nhập mới xem được.
+Hiện giữ lịch sử kiểm tra trong cơ sở dữ liệu; chưa có chức năng dọn/xóa bản kiểm tra.
+
+PHẠM VI
+Bộ nhập hiện hỗ trợ một cửa hàng Sapo; không trộn mã của nhiều cửa hàng.
+Đây là định dạng trung gian có ghép cột, chưa xác minh trên file export Sapo thật của Sakura.
+Không có kết nối API Sapo hay đồng bộ tự động.
+Chia lô không quá 200 dòng; đơn nhiều dòng không được chia qua hai lô.
+Sau nhập, đối chiếu tổng khách, SKU, số đơn và tiền từng lô với nguồn trước khi vận hành.

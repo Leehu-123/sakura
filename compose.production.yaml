@@ -1,0 +1,124 @@
+# Standalone production composition. Do not combine with compose.dev.yaml.
+name: sakura-production
+x-log: &log
+  driver: json-file
+  options: { max-size: '10m', max-file: '3' }
+x-api-image: &api-image
+  image: sakura-api:${SAKURA_RELEASE:?Run deployment preparation}
+  build: { context: ., target: api }
+x-database: &database
+  DATABASE_URL: postgresql://${POSTGRES_USER:?Required}:${POSTGRES_PASSWORD:?Required}@postgres:5432/${POSTGRES_DB:?Required}?schema=public
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Required}
+      POSTGRES_DB: ${POSTGRES_DB:?Required}
+    volumes: ['postgres_data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging: *log
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes: ['redis_data:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *log
+  migrate:
+    <<: *api-image
+    environment: *database
+    command: ['npm', 'run', 'db:migrate']
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: 'no'
+    logging: *log
+  seed:
+    <<: *api-image
+    environment:
+      <<: *database
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?Required for empty installation only}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Quan tri Sakura}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?Required for empty installation only}
+    command: ['npm', 'run', 'db:seed']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    profiles: ['setup']
+    restart: 'no'
+    logging: *log
+  api:
+    <<: *api-image
+    environment:
+      <<: *database
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      WEB_ORIGIN: https://${SAKURA_DOMAIN:?Set company domain}
+      PUBLIC_WEB_ORIGIN: https://${SAKURA_DOMAIN:?Set company domain}
+      COOKIE_SECURE: 'true'
+      TRUST_PROXY_HOPS: '1'
+      JWT_SECRET: ${JWT_SECRET:?Required}
+      MEDIA_ROOT: /data/media
+      BACKUP_ROOT: /data/backups
+      MESSENGER_ENABLED: 'false'
+      MESSENGER_CONFIG_KEY: ${MESSENGER_CONFIG_KEY:-}
+      MESSENGER_SEND_ENABLED: 'false'
+    volumes:
+      [
+        'media_data:/data/media',
+        '${SAKURA_BACKUP_DIR:?Set absolute backup directory}:/data/backups:ro',
+      ]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    logging: *log
+  worker:
+    image: sakura-worker:${SAKURA_RELEASE:?Required}
+    build: { context: ., target: worker }
+    environment:
+      <<: *database
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *log
+  web:
+    image: sakura-web:${SAKURA_RELEASE:?Required}
+    build: { context: ., target: web-production }
+    environment:
+      SAKURA_DOMAIN: ${SAKURA_DOMAIN:?Set company domain}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes: ['caddy_data:/data', 'caddy_config:/config']
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+    logging: *log
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  caddy_data:
+  caddy_config:

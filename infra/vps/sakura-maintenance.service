@@ -1,0 +1,17 @@
+[Unit]
+Description=Sakura expired session maintenance
+Requires=sakura-db.service
+After=sakura-db.service
+
+[Service]
+Type=oneshot
+User=sakura
+Group=sakura
+Slice=sakura.slice
+EnvironmentFile=/srv/sakura/shared/app.env
+ExecStart=/opt/sakura/node/bin/node /srv/sakura/bin/session-maintenance.cjs
+MemoryMax=96M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

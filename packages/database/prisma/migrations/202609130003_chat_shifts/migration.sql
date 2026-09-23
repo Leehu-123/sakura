@@ -1,0 +1,14 @@
+CREATE TABLE "ChatTeam" ("id" UUID NOT NULL, "name" TEXT NOT NULL, "version" INTEGER NOT NULL DEFAULT 1, "isActive" BOOLEAN NOT NULL DEFAULT true, CONSTRAINT "ChatTeam_pkey" PRIMARY KEY ("id"));
+CREATE TABLE "ChatTeamMember" ("teamId" UUID NOT NULL REFERENCES "ChatTeam"("id"), "userId" UUID NOT NULL REFERENCES "User"("id"), CONSTRAINT "ChatTeamMember_pkey" PRIMARY KEY ("teamId", "userId"));
+CREATE INDEX "ChatTeamMember_userId_idx" ON "ChatTeamMember"("userId");
+CREATE TABLE "ChatTeamPage" ("pageId" TEXT NOT NULL, "teamId" UUID NOT NULL REFERENCES "ChatTeam"("id"), CONSTRAINT "ChatTeamPage_pkey" PRIMARY KEY ("pageId"));
+CREATE INDEX "ChatTeamPage_teamId_idx" ON "ChatTeamPage"("teamId");
+CREATE TABLE "ChatShift" ("id" UUID NOT NULL, "teamId" UUID NOT NULL REFERENCES "ChatTeam"("id"), "userId" UUID NOT NULL REFERENCES "User"("id"), "label" TEXT NOT NULL, "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "endedAt" TIMESTAMP(3), "endNote" TEXT NOT NULL DEFAULT '', CONSTRAINT "ChatShift_pkey" PRIMARY KEY ("id"), CONSTRAINT "ChatShift_time_valid" CHECK ("endedAt" IS NULL OR "endedAt" >= "startedAt"));
+CREATE UNIQUE INDEX "ChatShift_one_open_per_user" ON "ChatShift"("userId") WHERE "endedAt" IS NULL;
+CREATE INDEX "ChatShift_teamId_endedAt_idx" ON "ChatShift"("teamId", "endedAt");
+CREATE INDEX "ChatShift_userId_startedAt_idx" ON "ChatShift"("userId", "startedAt");
+ALTER TABLE "ChatConversation" ADD COLUMN "teamId" UUID REFERENCES "ChatTeam"("id"), ADD COLUMN "supportShiftId" UUID REFERENCES "ChatShift"("id"), ADD COLUMN "workState" TEXT NOT NULL DEFAULT 'WAITING';
+ALTER TABLE "ChatConversation" ADD CONSTRAINT "ChatConversation_workState_valid" CHECK ("workState" IN ('WAITING','ACTIVE','DONE'));
+CREATE INDEX "ChatConversation_teamId_workState_lastActivityAt_idx" ON "ChatConversation"("teamId", "workState", "lastActivityAt");
+ALTER TABLE "ChatMessage" ADD COLUMN "shiftId" UUID REFERENCES "ChatShift"("id");
+CREATE INDEX "ChatMessage_shiftId_sourceAt_idx" ON "ChatMessage"("shiftId", "sourceAt");

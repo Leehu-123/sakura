@@ -1,0 +1,10 @@
+[Unit]
+Description=Sakura resource boundary on shared VPS
+
+[Slice]
+CPUQuota=60%
+CPUWeight=30
+MemoryHigh=400M
+MemoryMax=480M
+MemorySwapMax=128M
+TasksMax=128

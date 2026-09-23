@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.npm-cache/
+coverage/
+*.log
+.local/
+
+dist-seed/
+
+# Private runtime data and credentials never belong in source control.
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.bak
+*.sqlite
+*.sqlite3
+*.tgz
+*.zip
+rclone.conf
+backups/
+uploads/
+.DS_Store

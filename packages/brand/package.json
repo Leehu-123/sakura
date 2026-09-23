@@ -1,0 +1,8 @@
+{
+  "name": "@sakura/brand",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    "./logo.jpg": "./assets/logo.jpg"
+  }
+}

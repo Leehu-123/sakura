@@ -1,0 +1,15 @@
+{
+  "name": "@sakura/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "dotenv -e ../../.env -- tsc-watch -p tsconfig.json --onSuccess \"node dist/main.js\"",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@sakura/database": "0.1.0",
+    "bullmq": "^5.58.5",
+    "dotenv": "^17.2.2"
+  }
+}
