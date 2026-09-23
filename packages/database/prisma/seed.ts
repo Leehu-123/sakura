@@ -21,6 +21,8 @@ const entries: Array<[string, string, AccessScope[]]> = [
   ['sales.chat.use', 'Sử dụng hội thoại', ['GLOBAL', 'ASSIGNED']],
   ['sales.shipments.manage', 'Quản lý vận chuyển', ['GLOBAL', 'ASSIGNED']],
   ['sales.reports.read', 'Xem báo cáo bán hàng', ['GLOBAL', 'ASSIGNED']],
+  ['sales.tasks.read', 'Xem công việc', ['GLOBAL', 'ASSIGNED']],
+  ['sales.tasks.manage', 'Quản lý công việc', ['GLOBAL', 'ASSIGNED']],
 ];
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();

@@ -30,6 +30,10 @@ import { Storage } from './Storage';
 import { SalesReport } from './sales/Reports';
 import { Orders } from './sales/Orders';
 import { ShoppingBag, Package } from 'lucide-react';
+import { MyDashboard } from './sales/MyDashboard';
+import { MyPipeline } from './sales/MyPipeline';
+import { MyTasks } from './sales/MyTasks';
+import { CalendarCheck, Kanban, ListTodo } from 'lucide-react';
 type Grant = { permission: string; scope: string };
 type Me = {
   id: string;
@@ -92,7 +96,10 @@ type Tab =
   | 'orders'
   | 'imports'
   | 'historical'
-  | 'inbox';
+  | 'inbox'
+  | 'my-dashboard'
+  | 'my-pipeline'
+  | 'my-tasks';
 type Modal =
   | { kind: 'user'; user?: User }
   | { kind: 'role'; role?: Role }
@@ -113,6 +120,9 @@ const titles: Record<Tab, string> = {
   imports: 'Nhập dữ liệu Sapo',
   historical: 'Đơn cũ Sapo',
   inbox: 'Hộp thư Messenger',
+  'my-dashboard': 'Tổng quan Sale',
+  'my-pipeline': 'Pipeline khách hàng',
+  'my-tasks': 'Công việc',
   overview: 'Tổng quan',
   users: 'Tài khoản',
   roles: 'Vai trò & phân quyền',
@@ -658,6 +668,9 @@ function Workspace({
     active?: boolean;
   }[] = [
     { id: 'overview', icon: LayoutDashboard },
+    { id: 'my-dashboard' as Tab, icon: CalendarCheck, permission: 'sales.tasks.read' },
+    { id: 'my-pipeline' as Tab, icon: Kanban, permission: 'sales.tasks.read' },
+    { id: 'my-tasks' as Tab, icon: ListTodo, permission: 'sales.tasks.read' },
     { id: 'customers', icon: Users, permission: 'sales.customers.read' },
     { id: 'products', icon: Package, permission: 'catalog.products.read' },
     { id: 'orders', icon: ShoppingBag, permission: 'sales.orders.read' },
@@ -831,6 +844,9 @@ function Workspace({
               {tab === 'imports' && <Imports />}
               {tab === 'historical' && <HistoricalOrders />}
               {tab === 'inbox' && <Inbox actor={me} />}
+              {tab === 'my-dashboard' && <MyDashboard actor={me} />}
+              {tab === 'my-pipeline' && <MyPipeline actor={me} onCustomer={(id) => { /* navigate to customer detail */ }} />}
+              {tab === 'my-tasks' && <MyTasks actor={me} />}
               {(tab === 'overview' || tab === 'reports') &&
                 (me.grants.some((g) => g.permission === 'sales.reports.read') ? (
                   <SalesReport

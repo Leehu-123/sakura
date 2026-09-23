@@ -163,8 +163,13 @@ export class SalesController {
     return this.sales.payment(actor, id, dto);
   }
 }
+import { TasksController } from './tasks.controller';
+import { TasksService } from './tasks.service';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
+
 @Module({
-  controllers: [SalesController, ReportsController],
-  providers: [SalesService, OrderFeedService, SalesReports],
+  controllers: [SalesController, ReportsController, TasksController, DashboardController],
+  providers: [SalesService, OrderFeedService, SalesReports, TasksService, DashboardService],
 })
 export class SalesModule {}

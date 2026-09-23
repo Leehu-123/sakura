@@ -289,7 +289,7 @@ export class SalesService {
       checkVersion(customer.version, dto.version);
       await tx.customer.update({
         where: { id, version: dto.version },
-        data: { version: { increment: 1 } },
+        data: { version: { increment: 1 }, lastContactDate: new Date() },
       });
       const activity = await tx.careActivity.create({
         data: { customerId: id, authorId: actor.id, note: dto.note },
