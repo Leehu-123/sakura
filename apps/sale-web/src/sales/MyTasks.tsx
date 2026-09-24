@@ -79,16 +79,16 @@ export function MyTasks({ actor }: { actor: Actor }) {
       {result.data && (
         <section className="panel">
           <div className="task-list" style={{ padding: 24 }}>
-            {result.data.items.map(t => {
+            {(result.data.items || []).map(t => {
               const isOverdue = t.dueDate && t.dueDate < todayStr && t.status !== 'DONE';
               const isToday = t.dueDate === todayStr && t.status !== 'DONE';
               return (
                 <div className="task-item" key={t.id}>
                   <input type="checkbox" checked={t.status === 'DONE'} onChange={() => toggleTask(t)} />
-                  <span className={`priority-dot --${t.priority.toLowerCase()}`} />
+                  <span className={`priority-dot --${(t.priority || 'normal').toLowerCase()}`} />
                   <div style={{ flex: 1, textDecoration: t.status === 'DONE' ? 'line-through' : 'none' }}>
                     <strong>{t.title}</strong>
-                    {t.customer && <span className="badge">{t.customer.name}</span>}
+                    {t.customer?.name && <span className="badge">{t.customer.name}</span>}
                     {t.dueDate && (
                       <small className={`block ${isOverdue ? 'overdue' : ''}`} style={{ color: isToday ? '#d97706' : undefined }}>
                         Hạn: {date(t.dueDate)}
@@ -107,7 +107,7 @@ export function MyTasks({ actor }: { actor: Actor }) {
               );
             })}
           </div>
-          <State loading={false} error="" empty={!result.data.items.length} />
+          <State loading={false} error="" empty={!(result.data.items || []).length} />
           <Pager data={result.data} page={page} setPage={setPage} />
         </section>
       )}
@@ -156,7 +156,7 @@ function TaskModal({ task, close, done }: { task: Task | null, close: () => void
           <select name="customerId" defaultValue={task?.customer?.id || ''}>
             <option value="">Chưa chọn</option>
             {task?.customer && <option value={task.customer.id}>{task.customer.name}</option>}
-            {customers.data?.items.filter(c => c.id !== task?.customer?.id).map(c => (
+            {customers.data?.items?.filter((c: any) => c.id !== task?.customer?.id).map((c: any) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>

@@ -34,17 +34,21 @@ export function MyPipeline({ actor, onCustomer }: { actor: Actor; onCustomer: (i
       </div>
 
       <State loading={pipeline.loading} error={pipeline.error} />
-      {pipeline.data && (
-        <div className="pipeline-cards">
-          {pipeline.data.groups.map(g => (
-            <div className="panel pipeline-card" key={g.status}>
-              <span className="badge">{customerStatuses[g.status] || g.status}</span>
-              <p><strong>{g.count}</strong> khách hàng</p>
-              <p>Dự kiến: <strong>{money(g.expectedRevenue || '0')}</strong></p>
-            </div>
-          ))}
-        </div>
-      )}
+      {pipeline.data && (() => {
+        const groups = (pipeline.data as any).groups || (pipeline.data as any).pipeline || [];
+        const total = (pipeline.data as any).totalExpected ?? (pipeline.data as any).totalExpectedRevenue ?? '0';
+        return (
+          <div className="pipeline-cards">
+            {groups.map((g: any) => (
+              <div className="panel pipeline-card" key={g.status}>
+                <span className="badge">{customerStatuses[g.status] || g.status}</span>
+                <p><strong>{g.count}</strong> khách hàng</p>
+                <p>Dự kiến: <strong>{money(g.expectedRevenue)}</strong></p>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       <div className="sales-toolbar" style={{ marginTop: 24 }}>
         <SearchBox placeholder="Tìm khách hàng…" onSearch={s => { setSearch(s); setPage(1); }} />
@@ -67,31 +71,31 @@ export function MyPipeline({ actor, onCustomer }: { actor: Actor; onCustomer: (i
                 </tr>
               </thead>
               <tbody>
-                {customers.data.items.map(c => (
+                {(customers.data.items || []).map(c => (
                   <tr key={c.id}>
                     <td>
                       <button className="text-button link-button" onClick={() => onCustomer(c.id)}>
                         {c.name}
                       </button>
                     </td>
-                    <td>{c.phone}</td>
+                    <td>{c.phone || '—'}</td>
                     <td><span className="badge">{customerStatuses[c.status] || c.status}</span></td>
                     <td>{c.expectedRevenue ? money(c.expectedRevenue) : '—'}</td>
                     <td>{c.lastContactDate ? date(c.lastContactDate) : '—'}</td>
                     <td>{c.nextContactDate ? date(c.nextContactDate) : '—'}</td>
                     <td>
-                      {c.tags.map(t => <span className="badge gray" key={t}>{t}</span>)}
+                      {(c.tags || []).map(t => <span className="badge gray" key={t}>{t}</span>)}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <State loading={false} error="" empty={!customers.data.items.length} />
+          <State loading={false} error="" empty={!(customers.data.items || []).length} />
           <Pager data={customers.data} page={page} setPage={setPage} />
           {pipeline.data && (
             <div style={{ padding: '16px 24px', borderTop: '1px solid var(--line)', textAlign: 'right' }}>
-              Tổng dự kiến: <strong>{money(pipeline.data.totalExpected)}</strong>
+              Tổng dự kiến: <strong>{money((pipeline.data as any).totalExpected ?? (pipeline.data as any).totalExpectedRevenue)}</strong>
             </div>
           )}
         </section>

@@ -10,7 +10,8 @@ export class DashboardService {
 
   async myDashboard(actor: Principal) {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const today = new Date(now.getTime() + 7 * 3600000).toISOString().slice(0, 10);
+    const startOfMonth = new Date(today.slice(0, 8) + '01T00:00:00+07:00');
     
     const kpiResult = await this.db.$queryRaw<{ ordersThisMonth: bigint, revenue: string, paid: string }[]>`
       SELECT 
@@ -18,7 +19,7 @@ export class DashboardService {
         COALESCE(SUM(total), 0) as revenue,
         COALESCE(SUM("paidAmount"), 0) as paid
       FROM "Order"
-      WHERE "closedByUserId" = ${actor.id}::uuid
+      WHERE ("closedByUserId" = ${actor.id}::uuid OR "createdById" = ${actor.id}::uuid)
         AND "createdAt" >= ${startOfMonth}
         AND status IN ('CONFIRMED', 'COMPLETED')
     `;
@@ -35,24 +36,23 @@ export class DashboardService {
         : {
             OR: [
               { createdById: actor.id },
-              { closedByUserId: actor.id }
-            ]
+              { closedByUserId: actor.id },
+              { customer: { assignments: { some: { userId: actor.id, endedAt: null } } } },
+            ],
           },
       include: {
-        customer: { select: { id: true, name: true } }
+        customer: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 10,
     });
 
     return {
-      kpi: {
-        ordersThisMonth: Number(kpi.ordersThisMonth),
-        revenue,
-        paid,
-        unpaid: revenue - paid,
-      },
-      recentOrders
+      ordersThisMonth: Number(kpi.ordersThisMonth),
+      revenue: String(revenue),
+      paid: String(paid),
+      unpaid: String(Math.max(revenue - paid, 0)),
+      recentOrders,
     };
   }
 
@@ -81,15 +81,22 @@ export class DashboardService {
       GROUP BY status
     `;
 
-    const result = pipeline.map(p => ({
+    const statusMap = new Map(pipeline.map(p => [p.status, {
       status: p.status,
       count: Number(p.count),
-      expectedRevenue: Number(p.expectedRevenue)
-    }));
+      expectedRevenue: String(Number(p.expectedRevenue) || 0),
+    }]));
 
-    const totalExpectedRevenue = result.reduce((sum, item) => sum + item.expectedRevenue, 0);
+    const standardStatuses = ['NEW', 'CONSULTING', 'WON', 'RETURNING', 'INACTIVE'];
+    const result = standardStatuses.map(s => statusMap.get(s) || {
+      status: s,
+      count: 0,
+      expectedRevenue: '0',
+    });
 
-    return { pipeline: result, totalExpectedRevenue };
+    const totalExpected = result.reduce((sum, item) => sum + Number(item.expectedRevenue), 0);
+
+    return { groups: result, totalExpected: String(totalExpected) };
   }
 
   async myCustomers(actor: Principal, query: CustomerQuery) {

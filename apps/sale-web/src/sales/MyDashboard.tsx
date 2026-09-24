@@ -66,82 +66,96 @@ export function MyDashboard({ actor }: { actor: Actor }) {
       </div>
 
       <State loading={dashboard.loading} error={dashboard.error} />
-      {dashboard.data && (
-        <div className="kpi-grid">
-          <div className="panel kpi-card">
-            <span>Đơn tháng này</span>
-            <strong>{dashboard.data.ordersThisMonth}</strong>
-          </div>
-          <div className="panel kpi-card">
-            <span>Doanh thu</span>
-            <strong>{money(dashboard.data.revenue)}</strong>
-          </div>
-          <div className="panel kpi-card">
-            <span>Đã thu</span>
-            <strong>{money(dashboard.data.paid)}</strong>
-          </div>
-          <div className="panel kpi-card">
-            <span>Còn phải thu</span>
-            <strong>{money(dashboard.data.unpaid)}</strong>
-          </div>
-        </div>
-      )}
+      {dashboard.data && (() => {
+        const kpi = (dashboard.data as any).kpi || dashboard.data;
+        const ordersCount = kpi.ordersThisMonth ?? 0;
+        const revenue = kpi.revenue ?? '0';
+        const paid = kpi.paid ?? '0';
+        const unpaid = kpi.unpaid ?? '0';
+        const recentOrders = dashboard.data.recentOrders || [];
 
-      <div className="overview-grid" style={{ marginTop: 24 }}>
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Công việc hôm nay</h2>
-          </div>
-          <State loading={tasks.loading} error={tasks.error} />
-          {tasks.data && (
-            <div className="task-list" style={{ padding: '0 24px 24px' }}>
-              {tasks.data.overdue.map(t => renderTask(t, true))}
-              {tasks.data.due.map(t => renderTask(t, false))}
-              {tasks.data.completed.map(t => renderTask(t, false))}
-              {!tasks.data.overdue.length && !tasks.data.due.length && !tasks.data.completed.length && (
-                <p className="empty">Không có công việc nào cho hôm nay.</p>
-              )}
+        return (
+          <>
+            <div className="kpi-grid">
+              <div className="panel kpi-card">
+                <span>Đơn tháng này</span>
+                <strong>{ordersCount}</strong>
+              </div>
+              <div className="panel kpi-card">
+                <span>Doanh thu</span>
+                <strong>{money(revenue)}</strong>
+              </div>
+              <div className="panel kpi-card">
+                <span>Đã thu</span>
+                <strong>{money(paid)}</strong>
+              </div>
+              <div className="panel kpi-card">
+                <span>Còn phải thu</span>
+                <strong>{money(unpaid)}</strong>
+              </div>
             </div>
-          )}
-        </section>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Đơn hàng gần đây</h2>
-          </div>
-          {dashboard.data && (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Mã đơn</th>
-                    <th>Khách</th>
-                    <th>Trạng thái</th>
-                    <th>Tổng tiền</th>
-                    <th>Ngày</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.data.recentOrders.map(o => (
-                    <tr key={o.id}>
-                      <td>SK-{String(o.number).padStart(6, '0')}</td>
-                      <td>{o.customer.name}</td>
-                      <td><span className="badge">{orderStatuses[o.status] || o.status}</span></td>
-                      <td>{money(o.total)}</td>
-                      <td>{date(o.createdAt)}</td>
-                    </tr>
-                  ))}
-                  {!dashboard.data.recentOrders.length && (
-                    <tr>
-                      <td colSpan={5} className="empty">Chưa có đơn hàng nào.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="overview-grid" style={{ marginTop: 24 }}>
+              <section className="panel">
+                <div className="panel-head">
+                  <h2>Công việc hôm nay</h2>
+                </div>
+                <State loading={tasks.loading} error={tasks.error} />
+                {tasks.data && (() => {
+                  const overdue = tasks.data.overdue || [];
+                  const due = tasks.data.due || [];
+                  const completed = tasks.data.completed || [];
+                  return (
+                    <div className="task-list" style={{ padding: '0 24px 24px' }}>
+                      {overdue.map(t => renderTask(t, true))}
+                      {due.map(t => renderTask(t, false))}
+                      {completed.map(t => renderTask(t, false))}
+                      {!overdue.length && !due.length && !completed.length && (
+                        <p className="empty">Không có công việc nào cho hôm nay.</p>
+                      )}
+                    </div>
+                  );
+                })()}
+              </section>
+
+              <section className="panel">
+                <div className="panel-head">
+                  <h2>Đơn hàng gần đây</h2>
+                </div>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mã đơn</th>
+                        <th>Khách</th>
+                        <th>Trạng thái</th>
+                        <th>Tổng tiền</th>
+                        <th>Ngày</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentOrders.map(o => (
+                        <tr key={o.id}>
+                          <td>SK-{String(o.number).padStart(6, '0')}</td>
+                          <td>{o.customer?.name || 'Chưa có tên'}</td>
+                          <td><span className="badge">{orderStatuses[o.status] || o.status}</span></td>
+                          <td>{money(o.total)}</td>
+                          <td>{date(o.createdAt)}</td>
+                        </tr>
+                      ))}
+                      {!recentOrders.length && (
+                        <tr>
+                          <td colSpan={5} className="empty">Chưa có đơn hàng nào.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </div>
-          )}
-        </section>
-      </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

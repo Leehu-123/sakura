@@ -388,11 +388,11 @@ function Handoff({
     </Modal>
   );
 }
-export function Customers({ actor }: { actor: Actor }) {
+export function Customers({ actor, initialId }: { actor: Actor; initialId?: string | null }) {
   const [page, setPage] = useState(1),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState(''),
-    [selected, setSelected] = useState<string | null>(null),
+    [selected, setSelected] = useState<string | null>(initialId || null),
     [creating, setCreating] = useState(false),
     [revision, setRevision] = useState(0);
   const result = useResource<Page<Customer>>(

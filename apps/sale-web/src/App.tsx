@@ -561,6 +561,7 @@ function Workspace({
   const [formError, setFormError] = useState('');
   const [catalogType, setCatalogType] = useState<keyof Catalogs>('employees');
   const [roleGrants, setRoleGrants] = useState<Record<string, string>>({});
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -837,7 +838,13 @@ function Workspace({
             </div>
           ) : error ? null : (
             <>
-              {tab === 'customers' && <Customers actor={me} />}
+              {tab === 'customers' && (
+                <Customers
+                  key={selectedCustomerId || 'all'}
+                  actor={me}
+                  initialId={selectedCustomerId}
+                />
+              )}
               {tab === 'products' && <Products actor={me} />}
               {tab === 'storage' && <Storage />}
               {tab === 'orders' && <Orders actor={me} />}
@@ -845,7 +852,15 @@ function Workspace({
               {tab === 'historical' && <HistoricalOrders />}
               {tab === 'inbox' && <Inbox actor={me} />}
               {tab === 'my-dashboard' && <MyDashboard actor={me} />}
-              {tab === 'my-pipeline' && <MyPipeline actor={me} onCustomer={(id) => { /* navigate to customer detail */ }} />}
+              {tab === 'my-pipeline' && (
+                <MyPipeline
+                  actor={me}
+                  onCustomer={(id) => {
+                    setSelectedCustomerId(id);
+                    navigate('customers');
+                  }}
+                />
+              )}
               {tab === 'my-tasks' && <MyTasks actor={me} />}
               {(tab === 'overview' || tab === 'reports') &&
                 (me.grants.some((g) => g.permission === 'sales.reports.read') ? (

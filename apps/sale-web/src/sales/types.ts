@@ -99,14 +99,37 @@ export const paymentStatuses: Record<string, string> = {
   PARTIAL: 'Thu một phần',
   PAID: 'Đã thu đủ',
 };
-export const money = (n: string | number | bigint) =>
-  new Intl.NumberFormat('vi-VN').format(BigInt(n)) + ' đ';
-export const date = (s: string) =>
-  new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'Asia/Ho_Chi_Minh',
-  }).format(new Date(s));
+export const money = (n?: string | number | bigint | null) => {
+  if (n === undefined || n === null || n === '') return '0 đ';
+  try {
+    let intVal: bigint;
+    if (typeof n === 'bigint') {
+      intVal = n;
+    } else if (typeof n === 'number') {
+      intVal = BigInt(Math.round(isNaN(n) ? 0 : n));
+    } else {
+      const s = String(n).trim().split('.')[0].replace(/[^\d-]/g, '');
+      intVal = s ? BigInt(s) : 0n;
+    }
+    return new Intl.NumberFormat('vi-VN').format(intVal) + ' đ';
+  } catch {
+    return '0 đ';
+  }
+};
+export const date = (s?: string | null) => {
+  if (!s) return '—';
+  try {
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('vi-VN', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'Asia/Ho_Chi_Minh',
+    }).format(d);
+  } catch {
+    return '—';
+  }
+};
 export const number = (n: number) => 'SK-' + String(n).padStart(6, '0');
 export const has = (actor: Actor, p: string) =>
   actor.grants.some((g) => g.permission === p && ['GLOBAL', 'ASSIGNED'].includes(g.scope));
