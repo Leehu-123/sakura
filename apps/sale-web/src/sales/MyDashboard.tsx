@@ -9,10 +9,10 @@ import {
   Plus,
   Pencil,
   Trash,
-  CheckCircle2,
-  Calendar,
-  Clock,
-  RotateCcw,
+  CheckSquare,
+  ClipboardList,
+  User,
+  Building,
 } from 'lucide-react';
 import { Task } from './MyTasks';
 
@@ -97,10 +97,14 @@ export function MyDashboard({
     setRevision((r) => r + 1);
   };
 
-  const completedDailyCount = (dailyTasks.data || []).filter(
+  const dailyItems = dailyTasks.data || [];
+  const completedDailyCount = dailyItems.filter(
     (t) => t.doneToday || t.status === 'DONE',
   ).length;
-  const totalDailyCount = (dailyTasks.data || []).length;
+  const totalDailyCount = dailyItems.length;
+  const progressPercent = totalDailyCount > 0
+    ? Math.round((completedDailyCount / totalDailyCount) * 100)
+    : 0;
 
   return (
     <div>
@@ -149,101 +153,122 @@ export function MyDashboard({
         <section className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <div
             className="panel-head"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12 }}
           >
             <div>
-              <h2>Checklist hàng ngày</h2>
-              <small className="muted">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckSquare size={20} style={{ color: '#059669' }} />
+                <h2 style={{ margin: 0 }}>Checklist hàng ngày</h2>
+              </div>
+              <small className="muted" style={{ display: 'block', marginTop: 4 }}>
                 {totalDailyCount > 0
-                  ? `${completedDailyCount}/${totalDailyCount} hoàn thành hôm nay`
-                  : 'Công việc lặp lại mỗi ngày'}
+                  ? `${completedDailyCount}/${totalDailyCount} việc hoàn thành hôm nay (${progressPercent}%)`
+                  : 'Công việc cố định lặp lại mỗi ngày'}
               </small>
             </div>
             <button
               className="text-button"
-              style={{ fontWeight: 600 }}
+              style={{ fontWeight: 600, color: 'var(--rose)' }}
               onClick={() => setDailyModal('create')}
             >
               <Plus size={16} /> Thêm việc hàng ngày
             </button>
           </div>
 
-          <State loading={dailyTasks.loading} error={dailyTasks.error} />
-          {dailyTasks.data && (
-            <div className="task-list" style={{ padding: '0 24px 24px', flex: 1 }}>
-              {dailyTasks.data.map((t) => {
-                const isDone = t.doneToday || t.status === 'DONE';
-                return (
-                  <div
-                    className="task-item"
-                    key={t.id}
-                    style={{
-                      background: isDone ? '#f9fafb' : 'white',
-                      borderColor: isDone ? '#e5e7eb' : 'var(--line)',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isDone}
-                      onChange={() => toggleDailyTask(t)}
-                      aria-label={t.title}
-                    />
-                    <div
-                      style={{
-                        flex: 1,
-                        textDecoration: isDone ? 'line-through' : 'none',
-                        color: isDone ? 'var(--muted)' : 'inherit',
-                      }}
-                    >
-                      <strong>{t.title}</strong>
-                      {t.note && (
-                        <p
-                          className="muted"
-                          style={{ margin: '2px 0 0', fontSize: '0.85rem' }}
-                        >
-                          {t.note}
-                        </p>
-                      )}
-                    </div>
-                    <div className="row-actions" style={{ marginLeft: 8 }}>
-                      <button
-                        className="icon-button"
-                        onClick={() => setDailyModal(t)}
-                        title="Chỉnh sửa"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        onClick={() => deleteTask(t)}
-                        title="Xóa"
-                      >
-                        <Trash size={15} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+          <div style={{ padding: '0 24px 24px', flex: 1 }}>
+            {totalDailyCount > 0 && (
+              <div className="task-progress-bar">
+                <div
+                  className="task-progress-fill"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            )}
 
-              {!dailyTasks.data.length && (
-                <div className="empty" style={{ padding: '32px 16px' }}>
-                  Chưa có checklist hàng ngày. Bấm "+ Thêm việc hàng ngày" để tạo các thói quen cần
-                  lặp lại mỗi ngày (gọi điện, chăm sóc khách, đối soát đơn...).
-                </div>
-              )}
-            </div>
-          )}
+            <State loading={dailyTasks.loading} error={dailyTasks.error} />
+            {dailyTasks.data && (
+              <div className="task-list">
+                {dailyTasks.data.map((t) => {
+                  const isDone = t.doneToday || t.status === 'DONE';
+                  return (
+                    <div
+                      className={`task-item ${isDone ? 'is-done' : ''}`}
+                      key={t.id}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isDone}
+                        onChange={() => toggleDailyTask(t)}
+                        aria-label={t.title}
+                      />
+                      <div className="task-body">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <p className={`task-title ${isDone ? 'done' : ''}`}>
+                            {t.title}
+                          </p>
+                          {isDone && (
+                            <span className="badge" style={{ background: '#dcfce7', color: '#166534', fontSize: '0.75rem', padding: '2px 8px' }}>
+                              Đã xong
+                            </span>
+                          )}
+                        </div>
+                        {t.note && <p className="task-note">{t.note}</p>}
+                      </div>
+                      <div className="row-actions" style={{ marginLeft: 8, flexShrink: 0 }}>
+                        <button
+                          className="icon-button"
+                          onClick={() => setDailyModal(t)}
+                          title="Chỉnh sửa"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          onClick={() => deleteTask(t)}
+                          title="Xóa"
+                        >
+                          <Trash size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {!dailyTasks.data.length && (
+                  <div className="empty" style={{ padding: '40px 16px', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 12px', color: 'var(--muted)' }}>
+                      Chưa có checklist hàng ngày. Hãy thêm các công việc cần lặp lại mỗi ngày:
+                    </p>
+                    <p className="muted" style={{ fontSize: '0.85rem', margin: '0 0 16px' }}>
+                      (Ví dụ: Check tin nhắn Messenger, Gọi điện chăm sóc 5 khách cũ, Đối soát vận đơn VNPost...)
+                    </p>
+                    <button
+                      className="secondary"
+                      onClick={() => setDailyModal('create')}
+                    >
+                      <Plus size={16} /> Thêm việc hàng ngày
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* RIGHT COLUMN: OTHER ONE-TIME TASKS */}
         <section className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <div
             className="panel-head"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12 }}
           >
             <div>
-              <h2>Các công việc khác</h2>
-              <small className="muted">Công việc theo lịch hẹn, khách hàng và 1 lần</small>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ClipboardList size={20} style={{ color: '#3b82f6' }} />
+                <h2 style={{ margin: 0 }}>Các công việc khác</h2>
+              </div>
+              <small className="muted" style={{ display: 'block', marginTop: 4 }}>
+                Công việc nội bộ, lịch hẹn hoặc công việc 1 lần
+              </small>
             </div>
             <button className="primary" onClick={() => setOnceModal('create')}>
               <Plus size={16} /> Tạo công việc mới
@@ -315,10 +340,9 @@ export function MyDashboard({
 
                   return (
                     <div
-                      className="task-item"
+                      className={`task-item ${isDone ? 'is-done' : ''}`}
                       key={t.id}
                       style={{
-                        background: isDone ? '#f9fafb' : 'white',
                         opacity: t.status === 'CANCELLED' ? 0.6 : 1,
                       }}
                     >
@@ -333,23 +357,26 @@ export function MyDashboard({
                         className={`priority-dot --${(t.priority || 'normal').toLowerCase()}`}
                         title={'Độ ưu tiên: ' + t.priority}
                       />
-                      <div
-                        style={{
-                          flex: 1,
-                          textDecoration: isDone ? 'line-through' : 'none',
-                        }}
-                      >
+                      <div className="task-body">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <strong>{t.title}</strong>
-                          {t.customer && (
+                          <p className={`task-title ${isDone ? 'done' : ''}`}>
+                            {t.title}
+                          </p>
+                          {t.customer ? (
                             <button
                               type="button"
                               className="badge"
                               style={{ cursor: onCustomer ? 'pointer' : 'default', border: 'none' }}
                               onClick={() => onCustomer && onCustomer(t.customer!.id)}
                             >
+                              <User size={12} style={{ marginRight: 4 }} />
                               {t.customer.name}
                             </button>
+                          ) : (
+                            <span className="badge gray" style={{ fontSize: '0.75rem' }}>
+                              <Building size={11} style={{ marginRight: 3 }} />
+                              Nội bộ
+                            </span>
                           )}
                           {t.autoGenerated && (
                             <span className="badge gray" style={{ fontSize: '0.75rem' }}>
@@ -357,15 +384,12 @@ export function MyDashboard({
                             </span>
                           )}
                         </div>
-                        {t.note && (
-                          <p className="muted" style={{ margin: '2px 0 0', fontSize: '0.85rem' }}>
-                            {t.note}
-                          </p>
-                        )}
+                        {t.note && <p className="task-note">{t.note}</p>}
                         {t.dueDate && (
                           <small
                             className={`block ${isOverdue ? 'overdue' : ''}`}
                             style={{
+                              marginTop: 4,
                               color: isOverdue ? '#e11d48' : isToday ? '#d97706' : undefined,
                               fontWeight: isOverdue || isToday ? 600 : undefined,
                             }}
@@ -387,7 +411,7 @@ export function MyDashboard({
                         <span title="Gặp trực tiếp"><Home size={16} className="muted" /></span>
                       )}
 
-                      <div className="row-actions" style={{ marginLeft: 8 }}>
+                      <div className="row-actions" style={{ marginLeft: 8, flexShrink: 0 }}>
                         <button
                           className="icon-button"
                           onClick={() => setOnceModal(t)}
@@ -518,7 +542,7 @@ function DailyTaskModal({
 }) {
   return (
     <Modal
-      title={task ? 'Sửa công việc hàng ngày' : 'Thêm công việc lặp lại hàng ngày'}
+      title={task ? 'Sửa việc hàng ngày' : 'Thêm việc lặp lại hàng ngày'}
       close={close}
     >
       <Form
@@ -545,11 +569,11 @@ function DailyTaskModal({
           />
         </label>
         <label>
-          Mô tả / Hướng dẫn thực hiện
+          Ghi chú / Tiêu chuẩn đạt được (tùy chọn)
           <textarea
             name="note"
             defaultValue={task?.note}
-            placeholder="Ghi chú chi tiết cách thực hiện hoặc tiêu chuẩn cần đạt..."
+            placeholder="Nội dung chi tiết hoặc tiêu chuẩn cần đạt khi thực hiện..."
           />
         </label>
       </Form>
@@ -567,9 +591,17 @@ function OneTimeTaskModal({
   close: () => void;
   done: () => void;
 }) {
+  // Option to link customer: default is false unless task already has a customer!
+  const [hasCustomer, setHasCustomer] = useState<boolean>(!!task?.customer);
   const [search, setSearch] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
+    task?.customer?.id || '',
+  );
+
   const customers = useResource<Page<any>>(
-    '/sales/customers?pageSize=20&search=' + encodeURIComponent(search),
+    hasCustomer
+      ? '/sales/customers?pageSize=20&search=' + encodeURIComponent(search)
+      : '',
   );
 
   return (
@@ -578,15 +610,25 @@ function OneTimeTaskModal({
         label="Lưu công việc"
         done={done}
         submit={async (f) => {
-          const body = {
+          // If hasCustomer is false, customerId is explicitly undefined so it will NOT trigger UUID validation
+          const customerId = hasCustomer && selectedCustomerId ? selectedCustomerId : undefined;
+
+          const body: Record<string, any> = {
             title: f.get('title'),
-            note: f.get('note'),
-            customerId: f.get('customerId') || null,
+            note: f.get('note') || '',
             dueDate: f.get('dueDate') || null,
             priority: f.get('priority') || 'NORMAL',
             contactChannel: f.get('contactChannel') || '',
             isRecurring: false,
-            ...(task ? { version: task.version, status: f.get('status') } : {}),
+            ...(customerId ? { customerId } : {}),
+            ...(task
+              ? {
+                  version: task.version,
+                  status: f.get('status'),
+                  // If editing and user unchecks customer, explicitly disconnect
+                  customerId: customerId || null,
+                }
+              : {}),
           };
           await api('/sales/tasks' + (task ? '/' + task.id : ''), task ? 'PATCH' : 'POST', body);
         }}
@@ -598,38 +640,71 @@ function OneTimeTaskModal({
             required
             defaultValue={task?.title}
             maxLength={200}
-            placeholder="Ví dụ: Gọi lại tư vấn bộ sản phẩm Sakura, Hẹn giao mẫu..."
+            placeholder="Ví dụ: Lấy mẫu từ kho, Báo cáo tuần, Gọi lại cho khách..."
           />
         </label>
+
+        {/* Customer option: Internal task vs Customer task */}
+        <div style={{ margin: '8px 0 16px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 500 }}>
+            <input
+              type="checkbox"
+              className="task-checkbox"
+              checked={hasCustomer}
+              onChange={(e) => setHasCustomer(e.target.checked)}
+            />
+            <span>Gắn với khách hàng cụ thể</span>
+          </label>
+
+          {hasCustomer && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 14,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 8,
+              }}
+            >
+              <label style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 6, display: 'block' }}>
+                Chọn khách hàng:
+              </label>
+              <input
+                type="text"
+                placeholder="Gõ tên hoặc số điện thoại để tìm..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ marginBottom: 8 }}
+              />
+              <select
+                value={selectedCustomerId}
+                onChange={(e) => setSelectedCustomerId(e.target.value)}
+              >
+                <option value="">-- Chọn khách hàng trong danh sách --</option>
+                {task?.customer && (
+                  <option value={task.customer.id}>{task.customer.name}</option>
+                )}
+                {customers.data?.items
+                  ?.filter((c: any) => c.id !== task?.customer?.id)
+                  .map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `(${c.phone})` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+        </div>
+
         <label>
-          Khách hàng liên quan (tùy chọn)
-          <input
-            type="text"
-            placeholder="Tìm tên khách hàng..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ marginBottom: 8 }}
-          />
-          <select name="customerId" defaultValue={task?.customer?.id || ''}>
-            <option value="">Không gắn khách hàng</option>
-            {task?.customer && <option value={task.customer.id}>{task.customer.name}</option>}
-            {customers.data?.items
-              ?.filter((c: any) => c.id !== task?.customer?.id)
-              .map((c: any) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.phone ? `(${c.phone})` : ''}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          Ghi chú
+          Ghi chú chi tiết (tùy chọn)
           <textarea
             name="note"
             defaultValue={task?.note}
-            placeholder="Ghi chú chi tiết yêu cầu, nội dung cần trao đổi..."
+            placeholder="Nội dung chi tiết, yêu cầu cần xử lý..."
           />
         </label>
+
         <div className="form-grid">
           <label>
             Hạn chót
@@ -649,6 +724,7 @@ function OneTimeTaskModal({
             </select>
           </label>
         </div>
+
         <div className="form-grid">
           <label>
             Kênh liên hệ

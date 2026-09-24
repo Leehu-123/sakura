@@ -14,7 +14,8 @@ import {
 import { TaskStatus, TaskPriority } from '@sakura/database';
 import { PageDto } from '../core/dto';
 
-const optional = () => ValidateIf((_o, value) => value !== undefined);
+const optional = () =>
+  ValidateIf((_o, value) => value !== undefined && value !== null && value !== '');
 
 export class CreateTaskDto {
   @ApiProperty()
@@ -24,7 +25,12 @@ export class CreateTaskDto {
   @MaxLength(200)
   title!: string;
 
-  @ApiPropertyOptional() @optional() @IsUUID() customerId?: string;
+  @ApiPropertyOptional()
+  @optional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsUUID()
+  customerId?: string;
+
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(4000) note?: string;
   @ApiPropertyOptional() @optional() @IsDateString() dueDate?: string;
   @ApiPropertyOptional({ enum: TaskPriority }) @optional() @IsEnum(TaskPriority) priority?: TaskPriority;
@@ -34,7 +40,13 @@ export class CreateTaskDto {
 
 export class UpdateTaskDto extends VersionDto {
   @ApiPropertyOptional() @optional() @IsString() @MinLength(2) @MaxLength(200) title?: string;
-  @ApiPropertyOptional() @optional() @IsUUID() customerId?: string;
+
+  @ApiPropertyOptional()
+  @optional()
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsUUID()
+  customerId?: string;
+
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(4000) note?: string;
   @ApiPropertyOptional() @optional() @IsDateString() dueDate?: string;
   @ApiPropertyOptional({ enum: TaskPriority }) @optional() @IsEnum(TaskPriority) priority?: TaskPriority;

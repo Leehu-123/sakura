@@ -154,9 +154,10 @@ export class TasksService {
 
   async create(actor: Principal, dto: CreateTaskDto) {
     return this.transaction(async (tx) => {
-      if (dto.customerId) {
+      const customerId = dto.customerId?.trim() || null;
+      if (customerId) {
         const customer = await tx.customer.findFirst({
-          where: { AND: [{ id: dto.customerId }, customerPredicate(actor, 'sales.customers.read')] },
+          where: { AND: [{ id: customerId }, customerPredicate(actor, 'sales.customers.read')] },
         });
         if (!customer) throw new NotFoundException('Không tìm thấy khách trong phạm vi của bạn.');
       }
@@ -165,7 +166,7 @@ export class TasksService {
         data: {
           title: dto.title,
           userId: actor.id,
-          customerId: dto.customerId || null,
+          customerId,
           note: dto.note || '',
           dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
           priority: dto.priority || 'NORMAL',
@@ -204,8 +205,13 @@ export class TasksService {
       }
 
       if (dto.customerId !== undefined) {
-        if (dto.customerId) {
-          data.customer = { connect: { id: dto.customerId } };
+        const customerId = dto.customerId?.trim() || null;
+        if (customerId) {
+          const customer = await tx.customer.findFirst({
+            where: { AND: [{ id: customerId }, customerPredicate(actor, 'sales.customers.read')] },
+          });
+          if (!customer) throw new NotFoundException('Không tìm thấy khách trong phạm vi của bạn.');
+          data.customer = { connect: { id: customerId } };
         } else {
           data.customer = { disconnect: true };
         }
