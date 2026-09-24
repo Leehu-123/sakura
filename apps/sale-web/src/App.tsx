@@ -671,7 +671,6 @@ function Workspace({
     { id: 'overview', icon: LayoutDashboard },
     { id: 'my-dashboard' as Tab, icon: CalendarCheck, permission: 'sales.tasks.read' },
     { id: 'my-pipeline' as Tab, icon: Kanban, permission: 'sales.tasks.read' },
-    { id: 'my-tasks' as Tab, icon: ListTodo, permission: 'sales.tasks.read' },
     { id: 'customers', icon: Users, permission: 'sales.customers.read' },
     { id: 'products', icon: Package, permission: 'catalog.products.read' },
     { id: 'orders', icon: ShoppingBag, permission: 'sales.orders.read' },
@@ -851,7 +850,15 @@ function Workspace({
               {tab === 'imports' && <Imports />}
               {tab === 'historical' && <HistoricalOrders />}
               {tab === 'inbox' && <Inbox actor={me} />}
-              {tab === 'my-dashboard' && <MyDashboard actor={me} />}
+              {(tab === 'my-dashboard' || tab === 'my-tasks') && (
+                <MyDashboard
+                  actor={me}
+                  onCustomer={(id) => {
+                    setSelectedCustomerId(id);
+                    navigate('customers');
+                  }}
+                />
+              )}
               {tab === 'my-pipeline' && (
                 <MyPipeline
                   actor={me}
@@ -861,7 +868,6 @@ function Workspace({
                   }}
                 />
               )}
-              {tab === 'my-tasks' && <MyTasks actor={me} />}
               {(tab === 'overview' || tab === 'reports') &&
                 (me.grants.some((g) => g.permission === 'sales.reports.read') ? (
                   <SalesReport

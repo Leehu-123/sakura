@@ -9,6 +9,7 @@ import {
   MinLength,
   ValidateIf,
   IsDateString,
+  IsBoolean,
 } from 'class-validator';
 import { TaskStatus, TaskPriority } from '@sakura/database';
 import { PageDto } from '../core/dto';
@@ -28,6 +29,7 @@ export class CreateTaskDto {
   @ApiPropertyOptional() @optional() @IsDateString() dueDate?: string;
   @ApiPropertyOptional({ enum: TaskPriority }) @optional() @IsEnum(TaskPriority) priority?: TaskPriority;
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(50) contactChannel?: string;
+  @ApiPropertyOptional() @optional() @IsBoolean() isRecurring?: boolean;
 }
 
 export class UpdateTaskDto extends VersionDto {
@@ -38,10 +40,20 @@ export class UpdateTaskDto extends VersionDto {
   @ApiPropertyOptional({ enum: TaskPriority }) @optional() @IsEnum(TaskPriority) priority?: TaskPriority;
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(50) contactChannel?: string;
   @ApiPropertyOptional({ enum: TaskStatus }) @optional() @IsEnum(TaskStatus) status?: TaskStatus;
+  @ApiPropertyOptional() @optional() @IsBoolean() isRecurring?: boolean;
 }
 
 export class TaskQuery extends PageDto {
   @ApiPropertyOptional({ enum: TaskStatus }) @optional() @IsEnum(TaskStatus) status?: TaskStatus;
   @ApiPropertyOptional() @optional() @IsUUID() customerId?: string;
   @ApiPropertyOptional({ description: 'YYYY-MM-DD' }) @optional() @IsString() dueDate?: string;
+  @ApiPropertyOptional({ enum: ['today', 'week', 'month', 'overdue', 'all'] })
+  @optional()
+  @IsEnum(['today', 'week', 'month', 'overdue', 'all'])
+  timeRange?: 'today' | 'week' | 'month' | 'overdue' | 'all';
+  @ApiPropertyOptional()
+  @optional()
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @IsBoolean()
+  isRecurring?: boolean;
 }

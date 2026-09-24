@@ -28,6 +28,13 @@ export class TasksController {
     return this.tasks.list(actor, query);
   }
 
+  @Get('daily')
+  @RequirePermission('sales.tasks.read', 'ASSIGNED')
+  @ApiOperation({ summary: 'Checklist công việc lặp lại hàng ngày' })
+  dailyChecklist(@CurrentUser() actor: Principal) {
+    return this.tasks.dailyChecklist(actor);
+  }
+
   @Get('today')
   @RequirePermission('sales.tasks.read', 'ASSIGNED')
   @ApiOperation({ summary: 'Công việc hôm nay' })
