@@ -34,6 +34,7 @@ import { MyDashboard } from './sales/MyDashboard';
 import { MyPipeline } from './sales/MyPipeline';
 import { MyTasks } from './sales/MyTasks';
 import { CalendarCheck, Kanban, ListTodo } from 'lucide-react';
+import { TelegramSettings } from './TelegramSettings';
 type Grant = { permission: string; scope: string };
 type Me = {
   id: string;
@@ -57,6 +58,7 @@ type User = {
   displayName: string;
   status: string;
   mustChangePassword: boolean;
+  telegramChatId?: string | null;
   createdAt: string;
   roleAssignments: { role: { id: string; name: string; code: string } }[];
   employee?: { region?: { name: string } };
@@ -99,7 +101,8 @@ type Tab =
   | 'inbox'
   | 'my-dashboard'
   | 'my-pipeline'
-  | 'my-tasks';
+  | 'my-tasks'
+  | 'telegram';
 type Modal =
   | { kind: 'user'; user?: User }
   | { kind: 'role'; role?: Role }
@@ -129,6 +132,7 @@ const titles: Record<Tab, string> = {
   catalogs: 'Danh mục công ty',
   audit: 'Nhật ký thao tác',
   profile: 'Tài khoản của tôi',
+  telegram: 'Telegram',
 };
 const actions: Record<string, string> = {
   'order.shipping_updated': 'Cập nhật vận chuyển',
@@ -656,10 +660,11 @@ function Workspace({
       ['storage', 'core.audit.read'],
       ['imports', 'core.imports.manage'],
       ['audit', 'core.audit.read'],
+      ['telegram', 'core.users.manage'],
     ] as const
   ).filter(([, p]) => can(p));
   const accountSection = ['users', 'roles', 'catalogs'].includes(tab);
-  const settingSection = ['storage', 'imports', 'audit'].includes(tab);
+  const settingSection = ['storage', 'imports', 'audit', 'telegram'].includes(tab);
   const nav: {
     id: Tab;
     icon: typeof Users;
@@ -846,6 +851,7 @@ function Workspace({
               )}
               {tab === 'products' && <Products actor={me} />}
               {tab === 'storage' && <Storage />}
+              {tab === 'telegram' && <TelegramSettings />}
               {tab === 'orders' && <Orders actor={me} />}
               {tab === 'imports' && <Imports />}
               {tab === 'historical' && <HistoricalOrders />}
@@ -1198,6 +1204,7 @@ function Workspace({
                   void save('/core/users/' + modal.user.id, 'PATCH', {
                     displayName: f.get('displayName'),
                     status: f.get('status'),
+                    telegramChatId: f.get('telegramChatId') || '',
                     ...(can('core.roles.manage') && can('core.roles.read') ? { roleIds } : {}),
                   });
                 else
@@ -1240,14 +1247,26 @@ function Workspace({
                 </>
               )}
               {modal.user && (
-                <label>
-                  Trạng thái
-                  <select name="status" defaultValue={modal.user.status}>
-                    <option value="ACTIVE">Hoạt động</option>
-                    <option value="DISABLED">Đã khóa</option>
-                  </select>
-                  <small>Khóa tài khoản sẽ thu hồi các phiên đăng nhập.</small>
-                </label>
+                <>
+                  <label>
+                    Trạng thái
+                    <select name="status" defaultValue={modal.user.status}>
+                      <option value="ACTIVE">Hoạt động</option>
+                      <option value="DISABLED">Đã khóa</option>
+                    </select>
+                    <small>Khóa tài khoản sẽ thu hồi các phiên đăng nhập.</small>
+                  </label>
+                  <label>
+                    Telegram Chat ID
+                    <input
+                      name="telegramChatId"
+                      maxLength={50}
+                      defaultValue={modal.user.telegramChatId || ''}
+                      placeholder="Ví dụ: 123456789"
+                    />
+                    <small>Dùng @userinfobot trên Telegram để lấy Chat ID.</small>
+                  </label>
+                </>
               )}
               {can('core.roles.manage') && can('core.roles.read') && (
                 <fieldset>

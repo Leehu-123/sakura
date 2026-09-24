@@ -77,6 +77,16 @@ export class UpdateUserDto {
   @ArrayUnique()
   @IsUUID('all', { each: true })
   roleIds?: string[];
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @Transform(({ value }) => (value === '' || value === null ? undefined : value))
+  @IsString()
+  @MaxLength(50)
+  telegramChatId?: string;
+}
+export class TelegramConfigDto {
+  @ApiPropertyOptional() @ValidateIf((_o, v) => v !== undefined) @IsString() @MaxLength(200) botToken?: string;
+  @ApiPropertyOptional() @ValidateIf((_o, v) => v !== undefined) @IsBoolean() enabled?: boolean;
 }
 export class ResetPasswordDto {
   @ApiProperty({ minLength: 12, format: 'password' })

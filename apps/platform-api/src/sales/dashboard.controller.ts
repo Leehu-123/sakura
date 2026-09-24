@@ -25,6 +25,13 @@ export class DashboardController {
     return this.dashboard.myPipeline(actor);
   }
 
+  @Get('pipeline-board')
+  @RequirePermission('sales.customers.read', 'ASSIGNED')
+  @ApiOperation({ summary: 'Kanban board pipeline' })
+  myPipelineBoard(@CurrentUser() actor: Principal) {
+    return this.dashboard.myPipelineBoard(actor);
+  }
+
   @Get('customers')
   @RequirePermission('sales.customers.read', 'ASSIGNED')
   @ApiOperation({ summary: 'Khách hàng có CRM' })

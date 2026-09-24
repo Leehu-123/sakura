@@ -25,6 +25,7 @@ model User {
   passwordHash       String
   status             UserStatus           @default(ACTIVE)
   mustChangePassword Boolean              @default(true)
+  telegramChatId     String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   employee           Employee?
@@ -651,4 +652,11 @@ model DeliverySlip {
   previousSnapshots Json      @default("[]")
   voidedAt          DateTime?
   createdAt         DateTime  @default(now())
+}
+
+model TelegramConfig {
+  id        Int      @id @default(1)
+  botToken  String   @default("")
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 }

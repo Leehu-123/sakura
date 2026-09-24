@@ -99,6 +99,107 @@ export class DashboardService {
     return { groups: result, totalExpected: String(totalExpected) };
   }
 
+  async myPipelineBoard(actor: Principal) {
+    const isGlobal = hasPermission(actor.grants, 'sales.customers.read', 'GLOBAL');
+
+    const assignmentFilter: Prisma.CustomerWhereInput = isGlobal
+      ? {}
+      : { assignments: { some: { userId: actor.id, endedAt: null } } };
+
+    const standardStatuses = ['NEW', 'CONSULTING', 'WON', 'RETURNING', 'INACTIVE'] as const;
+    const now = new Date();
+
+    const columns = await Promise.all(
+      standardStatuses.map(async (status) => {
+        const [items, count] = await this.db.$transaction([
+          this.db.customer.findMany({
+            where: { ...assignmentFilter, status },
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              expectedRevenue: true,
+              nextContactDate: true,
+              lastContactDate: true,
+              tags: true,
+              region: { select: { name: true } },
+            },
+            orderBy: [
+              { lastContactDate: { sort: 'asc', nulls: 'first' } },
+              { nextContactDate: { sort: 'asc', nulls: 'first' } },
+              { name: 'asc' },
+            ],
+            take: 30,
+          }),
+          this.db.customer.count({ where: { ...assignmentFilter, status } }),
+        ]);
+
+        const revenueResult = await this.db.$queryRaw<{ total: string }[]>`
+          SELECT COALESCE(SUM("expectedRevenue"), 0)::text as total
+          FROM "Customer"
+          WHERE status = ${status}::"CustomerStatus"
+          ${isGlobal ? Prisma.empty : Prisma.sql`
+            AND EXISTS (
+              SELECT 1 FROM "CustomerAssignment" a
+              WHERE a."customerId" = "Customer".id
+                AND a."endedAt" IS NULL
+                AND a."userId" = ${actor.id}::uuid
+            )
+          `}
+        `;
+
+        const mappedItems = items.map((c) => {
+          const lastContact = c.lastContactDate ? c.lastContactDate.getTime() : null;
+          const nextContact = c.nextContactDate ? c.nextContactDate.getTime() : null;
+          const daysSinceContact = lastContact
+            ? Math.floor((now.getTime() - lastContact) / 86400000)
+            : null;
+          const daysUntilNext = nextContact
+            ? Math.floor((nextContact - now.getTime()) / 86400000)
+            : null;
+
+          let urgency: 'overdue' | 'due-soon' | 'ok' = 'ok';
+          if (lastContact === null) {
+            urgency = 'overdue';
+          } else if (daysUntilNext !== null && daysUntilNext < 0) {
+            urgency = 'overdue';
+          } else if (daysUntilNext !== null && daysUntilNext <= 2) {
+            urgency = 'due-soon';
+          } else if (daysSinceContact !== null && daysSinceContact > 7) {
+            urgency = 'due-soon';
+          }
+
+          return {
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            expectedRevenue: c.expectedRevenue ? String(Number(c.expectedRevenue)) : null,
+            lastContactDate: c.lastContactDate?.toISOString() || null,
+            nextContactDate: c.nextContactDate?.toISOString() || null,
+            daysSinceContact,
+            daysUntilNext,
+            urgency,
+            tags: c.tags,
+            regionName: c.region?.name || null,
+          };
+        });
+
+        // Sort: overdue first, then due-soon, then ok
+        const urgencyOrder = { overdue: 0, 'due-soon': 1, ok: 2 };
+        mappedItems.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
+
+        return {
+          status,
+          count,
+          expectedRevenue: revenueResult[0]?.total || '0',
+          items: mappedItems,
+        };
+      }),
+    );
+
+    return { columns };
+  }
+
   async myCustomers(actor: Principal, query: CustomerQuery) {
     const phone = query.search?.replace(/[^\d]/g, '');
     const where: Prisma.CustomerWhereInput = {

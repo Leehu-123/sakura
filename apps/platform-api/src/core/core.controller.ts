@@ -10,6 +10,7 @@ import {
   PageDto,
   ResetPasswordDto,
   RoleDto,
+  TelegramConfigDto,
   UpdateUserDto,
 } from './dto';
 @ApiTags('Nền tảng công ty')
@@ -100,5 +101,17 @@ export class CoreController {
   @ApiOperation({ summary: 'Nhật ký thao tác' })
   audit(@Query() query: PageDto) {
     return this.core.audit(query);
+  }
+  @Get('telegram')
+  @RequirePermission('core.users.manage')
+  @ApiOperation({ summary: 'Cấu hình Telegram bot' })
+  telegramConfig() {
+    return this.core.telegramConfig();
+  }
+  @Patch('telegram')
+  @RequirePermission('core.users.manage')
+  @ApiOperation({ summary: 'Cập nhật cấu hình Telegram bot' })
+  updateTelegramConfig(@CurrentUser() actor: Principal, @Body() dto: TelegramConfigDto) {
+    return this.core.updateTelegramConfig(actor.id, dto);
   }
 }

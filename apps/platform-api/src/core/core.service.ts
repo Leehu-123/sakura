@@ -3,13 +3,14 @@ import { Prisma } from '@sakura/database';
 import { Database } from '../db';
 import { hasPermission, Principal } from '../auth/policy';
 import { hashPassword } from '../auth/password';
-import { CatalogDto, CreateUserDto, EmployeeDto, PageDto, RoleDto, UpdateUserDto } from './dto';
+import { CatalogDto, CreateUserDto, EmployeeDto, PageDto, RoleDto, TelegramConfigDto, UpdateUserDto } from './dto';
 const userSelect = {
   id: true,
   email: true,
   displayName: true,
   status: true,
   mustChangePassword: true,
+  telegramChatId: true,
   createdAt: true,
   roleAssignments: { select: { role: { select: { id: true, code: true, name: true } } } },
   employee: { include: { department: true, branch: true, region: true } },
@@ -114,7 +115,7 @@ export class CoreService {
         }
         const user = await tx.user.update({
           where: { id },
-          data: { displayName: dto.displayName, status: dto.status },
+          data: { displayName: dto.displayName, status: dto.status, telegramChatId: dto.telegramChatId },
           select: userSelect,
         });
         if (dto.status === 'DISABLED')
@@ -278,5 +279,40 @@ export class CoreService {
       this.db.auditLog.count({ where }),
     ]);
     return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+  async telegramConfig() {
+    const config = await this.db.telegramConfig.findUnique({ where: { id: 1 } });
+    if (!config) return { id: 1, botToken: '', enabled: false, hasToken: false };
+    return {
+      id: config.id,
+      botToken: config.botToken ? '••••••' + config.botToken.slice(-6) : '',
+      enabled: config.enabled,
+      hasToken: !!config.botToken,
+    };
+  }
+  async updateTelegramConfig(actorId: string, dto: TelegramConfigDto) {
+    const data: Record<string, unknown> = {};
+    if (dto.botToken !== undefined) data.botToken = dto.botToken;
+    if (dto.enabled !== undefined) data.enabled = dto.enabled;
+    const config = await this.db.telegramConfig.upsert({
+      where: { id: 1 },
+      create: { id: 1, ...data },
+      update: data,
+    });
+    await this.db.auditLog.create({
+      data: {
+        actorId,
+        action: 'telegram.config_updated',
+        entity: 'TelegramConfig',
+        entityId: '1',
+        metadata: { enabled: config.enabled, hasToken: !!config.botToken },
+      },
+    });
+    return {
+      id: config.id,
+      botToken: config.botToken ? '••••••' + config.botToken.slice(-6) : '',
+      enabled: config.enabled,
+      hasToken: !!config.botToken,
+    };
   }
 }
