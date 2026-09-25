@@ -19,6 +19,7 @@ export type Customer = {
   status: string;
   regionId?: string;
   region?: Region;
+  expectedProducts?: string[];
   version: number;
   assignments: Assignment[];
   activities?: { id: string; note: string; createdAt: string; author: Person }[];

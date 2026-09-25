@@ -122,6 +122,7 @@ export class DashboardService {
               nextContactDate: true,
               lastContactDate: true,
               tags: true,
+              expectedProducts: true,
               region: { select: { name: true } },
             },
             orderBy: [
@@ -159,14 +160,29 @@ export class DashboardService {
             : null;
 
           let urgency: 'overdue' | 'due-soon' | 'ok' = 'ok';
-          if (lastContact === null) {
-            urgency = 'overdue';
-          } else if (daysUntilNext !== null && daysUntilNext < 0) {
+          
+          if (daysUntilNext !== null && daysUntilNext < 0) {
             urgency = 'overdue';
           } else if (daysUntilNext !== null && daysUntilNext <= 2) {
             urgency = 'due-soon';
-          } else if (daysSinceContact !== null && daysSinceContact > 7) {
-            urgency = 'due-soon';
+          } else if (status === 'NEW') {
+            if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 3)) {
+              urgency = 'overdue';
+            } else if (daysSinceContact !== null && daysSinceContact > 1) {
+              urgency = 'due-soon';
+            }
+          } else if (status === 'CONSULTING') {
+            if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 7)) {
+              urgency = 'overdue';
+            } else if (daysSinceContact !== null && daysSinceContact > 5) {
+              urgency = 'due-soon';
+            }
+          } else if (status === 'RETURNING' || status === 'INACTIVE') {
+            if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 15)) {
+              urgency = 'overdue';
+            } else if (daysSinceContact !== null && daysSinceContact > 10) {
+              urgency = 'due-soon';
+            }
           }
 
           return {
@@ -180,6 +196,7 @@ export class DashboardService {
             daysUntilNext,
             urgency,
             tags: c.tags,
+            expectedProducts: c.expectedProducts,
             regionName: c.region?.name || null,
           };
         });
@@ -197,7 +214,9 @@ export class DashboardService {
       }),
     );
 
-    return { columns };
+    const totalExpectedRevenue = columns.reduce((sum, col) => sum + Number(col.expectedRevenue), 0);
+
+    return { columns, totalExpectedRevenue: String(totalExpectedRevenue) };
   }
 
   async myCustomers(actor: Principal, query: CustomerQuery) {
@@ -261,5 +280,151 @@ export class DashboardService {
     });
 
     return { items: mappedItems, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async careAlerts(actor: Principal) {
+    const isGlobal = hasPermission(actor.grants, 'sales.customers.read', 'GLOBAL');
+    const assignmentFilter: Prisma.CustomerWhereInput = isGlobal
+      ? {}
+      : { assignments: { some: { userId: actor.id, endedAt: null } } };
+
+    const now = new Date();
+    const cutoff3 = new Date(now.getTime() - 3 * 86400000);
+    const cutoff7 = new Date(now.getTime() - 7 * 86400000);
+    const cutoff15 = new Date(now.getTime() - 15 * 86400000);
+    const cutoff1 = new Date(now.getTime() - 1 * 86400000);
+    const cutoff5 = new Date(now.getTime() - 5 * 86400000);
+    const cutoff10 = new Date(now.getTime() - 10 * 86400000);
+
+    const totalManaged = await this.db.customer.count({ where: { ...assignmentFilter } });
+
+    const overdueCustomers = await this.db.customer.count({
+      where: {
+        ...assignmentFilter,
+        OR: [
+          { status: 'NEW', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff3 } }] },
+          { status: 'CONSULTING', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff7 } }] },
+          { status: { in: ['RETURNING', 'INACTIVE'] }, OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff15 } }] },
+          { nextContactDate: { lt: now } },
+        ],
+      },
+    });
+
+    const dueSoonCustomers = await this.db.customer.count({
+      where: {
+        ...assignmentFilter,
+        OR: [
+          { status: 'NEW', lastContactDate: { gte: cutoff3, lt: cutoff1 } },
+          { status: 'CONSULTING', lastContactDate: { gte: cutoff7, lt: cutoff5 } },
+          { status: { in: ['RETURNING', 'INACTIVE'] }, lastContactDate: { gte: cutoff15, lt: cutoff10 } },
+          { nextContactDate: { gte: now, lt: new Date(now.getTime() + 2 * 86400000) } },
+        ],
+      },
+    });
+
+    const unansweredConversations = await this.db.$queryRaw<{ count: bigint }[]>`
+      SELECT COUNT(*)::bigint as count FROM "ChatConversation"
+      WHERE "supportUserId" = ${actor.id}::uuid
+        AND blocked = false
+        AND "lastInboundAt" IS NOT NULL
+        AND ("lastSentAt" IS NULL OR "lastSentAt" < "lastInboundAt")
+    `;
+    const unansweredCount = Number(unansweredConversations[0]?.count || 0n);
+
+    return {
+      totalManaged,
+      overdueCustomers,
+      dueSoonCustomers,
+      unansweredConversations: unansweredCount,
+    };
+  }
+
+  async careAlertCustomers(actor: Principal, type: string, query: CustomerQuery) {
+    const isGlobal = hasPermission(actor.grants, 'sales.customers.read', 'GLOBAL');
+    const assignmentFilter: Prisma.CustomerWhereInput = isGlobal
+      ? {}
+      : { assignments: { some: { userId: actor.id, endedAt: null } } };
+
+    const now = new Date();
+    const cutoff3 = new Date(now.getTime() - 3 * 86400000);
+    const cutoff7 = new Date(now.getTime() - 7 * 86400000);
+    const cutoff15 = new Date(now.getTime() - 15 * 86400000);
+    const cutoff1 = new Date(now.getTime() - 1 * 86400000);
+    const cutoff5 = new Date(now.getTime() - 5 * 86400000);
+    const cutoff10 = new Date(now.getTime() - 10 * 86400000);
+
+    if (type === 'unanswered') {
+      const skip = (query.page - 1) * query.pageSize;
+      const [items, totalRes] = await Promise.all([
+        this.db.$queryRaw<any[]>`
+          SELECT * FROM "ChatConversation"
+          WHERE "supportUserId" = ${actor.id}::uuid
+            AND blocked = false
+            AND "lastInboundAt" IS NOT NULL
+            AND ("lastSentAt" IS NULL OR "lastSentAt" < "lastInboundAt")
+          ORDER BY "lastInboundAt" ASC
+          LIMIT ${query.pageSize} OFFSET ${skip}
+        `,
+        this.db.$queryRaw<{ count: bigint }[]>`
+          SELECT COUNT(*)::bigint as count FROM "ChatConversation"
+          WHERE "supportUserId" = ${actor.id}::uuid
+            AND blocked = false
+            AND "lastInboundAt" IS NOT NULL
+            AND ("lastSentAt" IS NULL OR "lastSentAt" < "lastInboundAt")
+        `
+      ]);
+
+      const customerIds = items.map(i => i.customerId).filter(Boolean);
+      const customers = customerIds.length ? await this.db.customer.findMany({
+        where: { id: { in: customerIds } }
+      }) : [];
+      const customerMap = new Map(customers.map(c => [c.id, c]));
+
+      const mappedItems = items.map(item => ({
+        ...item,
+        customer: item.customerId ? customerMap.get(item.customerId) : null
+      }));
+
+      return {
+        items: mappedItems,
+        total: Number(totalRes[0]?.count || 0n),
+        page: query.page,
+        pageSize: query.pageSize
+      };
+    }
+
+    let whereCondition: Prisma.CustomerWhereInput = { ...assignmentFilter };
+    
+    if (type === 'overdue') {
+      whereCondition.OR = [
+        { status: 'NEW', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff3 } }] },
+        { status: 'CONSULTING', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff7 } }] },
+        { status: { in: ['RETURNING', 'INACTIVE'] }, OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff15 } }] },
+        { nextContactDate: { lt: now } },
+      ];
+    } else if (type === 'due-soon') {
+      whereCondition.OR = [
+        { status: 'NEW', lastContactDate: { gte: cutoff3, lt: cutoff1 } },
+        { status: 'CONSULTING', lastContactDate: { gte: cutoff7, lt: cutoff5 } },
+        { status: { in: ['RETURNING', 'INACTIVE'] }, lastContactDate: { gte: cutoff15, lt: cutoff10 } },
+        { nextContactDate: { gte: now, lt: new Date(now.getTime() + 2 * 86400000) } },
+      ];
+    }
+
+    const [items, total] = await this.db.$transaction([
+      this.db.customer.findMany({
+        where: whereCondition,
+        include: {
+          region: true,
+          assignments: { where: { endedAt: null }, include: { user: { select: { id: true, displayName: true } } } },
+        },
+        orderBy: [{ lastContactDate: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      this.db.customer.count({ where: whereCondition }),
+    ]);
+
+    return { items, total, page: query.page, pageSize: query.pageSize };
   }
 }

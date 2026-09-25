@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, Param } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, RequirePermission } from '../auth/access';
 import { Principal } from '../auth/policy';
@@ -37,5 +37,23 @@ export class DashboardController {
   @ApiOperation({ summary: 'Khách hàng có CRM' })
   myCustomers(@CurrentUser() actor: Principal, @Query() query: CustomerQuery) {
     return this.dashboard.myCustomers(actor, query);
+  }
+
+  @Get('care-alerts')
+  @RequirePermission('sales.customers.read', 'ASSIGNED')
+  @ApiOperation({ summary: 'Cảnh báo chăm sóc khách hàng' })
+  careAlerts(@CurrentUser() actor: Principal) {
+    return this.dashboard.careAlerts(actor);
+  }
+
+  @Get('care-alerts/:type')
+  @RequirePermission('sales.customers.read', 'ASSIGNED')
+  @ApiOperation({ summary: 'Danh sách khách cần chăm sóc' })
+  careAlertCustomers(
+    @CurrentUser() actor: Principal,
+    @Param('type') type: string,
+    @Query() query: CustomerQuery,
+  ) {
+    return this.dashboard.careAlertCustomers(actor, type, query);
   }
 }

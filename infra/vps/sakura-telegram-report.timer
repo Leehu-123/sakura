@@ -2,7 +2,7 @@
 Description=Daily Sakura Telegram sales report (22:00 VN)
 
 [Timer]
-OnCalendar=*-*-* 15:00:00
+OnCalendar=*-*-* 22:00:00
 Persistent=true
 RandomizedDelaySec=120
 

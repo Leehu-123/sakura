@@ -9,6 +9,7 @@ import {
   Order,
   Page,
   Person,
+  Product,
   Region,
   has,
   date,
@@ -29,6 +30,17 @@ function CustomerForm({
   close: () => void;
 }) {
   const regions = useResource<Region[]>('/sales/regions');
+  const products = useResource<Product[]>('/catalog/products');
+  const [selectedProducts, setSelectedProducts] = useState<string[]>(
+    customer?.expectedProducts || [],
+  );
+
+  const toggleProduct = (name: string) => {
+    setSelectedProducts((prev) =>
+      prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name],
+    );
+  };
+
   return (
     <Modal title={customer ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'} close={close}>
       <State loading={regions.loading} error={regions.error} />
@@ -46,6 +58,7 @@ function CustomerForm({
                 address: f.get('address'),
                 status: f.get('status'),
                 regionId: f.get('regionId') || null,
+                expectedProducts: selectedProducts,
                 ...(customer ? { version: customer.version } : {}),
               },
             );
@@ -106,6 +119,43 @@ function CustomerForm({
               </select>
             </label>
           </div>
+          {/* Expected Products multi-select */}
+          <label>
+            Sản phẩm dự kiến mua
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                padding: '8px 0',
+                minHeight: 40,
+              }}
+            >
+              {products.data?.filter((p) => p.isActive).map((p) => {
+                const isSelected = selectedProducts.includes(p.name);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`badge ${isSelected ? '' : 'gray'}`}
+                    style={{
+                      cursor: 'pointer',
+                      border: isSelected ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                      background: isSelected ? '#dbeafe' : '#f8fafc',
+                      color: isSelected ? '#1e40af' : '#64748b',
+                      fontWeight: isSelected ? 600 : 400,
+                      padding: '4px 10px',
+                      borderRadius: 16,
+                    }}
+                    onClick={() => toggleProduct(p.name)}
+                  >
+                    {isSelected ? '✓ ' : ''}{p.name}
+                  </button>
+                );
+              })}
+              {!products.data?.length && <span className="muted">Không có sản phẩm</span>}
+            </div>
+          </label>
           <State loading={regions.loading} error={regions.error} />
           {!customer && (
             <p className="muted">

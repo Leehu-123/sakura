@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useResource, State, Pager, SearchBox } from './shared';
 import { Actor, Page, money, date, customerStatuses } from './types';
-import { LayoutList, Kanban } from 'lucide-react';
+import { LayoutList, Kanban, TrendingUp } from 'lucide-react';
 
 type KanbanCustomer = {
   id: string;
@@ -14,6 +14,7 @@ type KanbanCustomer = {
   daysUntilNext: number | null;
   urgency: 'overdue' | 'due-soon' | 'ok';
   tags: string[];
+  expectedProducts: string[];
   regionName: string | null;
 };
 
@@ -24,7 +25,10 @@ type KanbanColumn = {
   items: KanbanCustomer[];
 };
 
-type BoardData = { columns: KanbanColumn[] };
+type BoardData = {
+  columns: KanbanColumn[];
+  totalExpectedRevenue: string;
+};
 
 type TableCustomer = {
   id: string;
@@ -89,6 +93,13 @@ function KanbanCard({ c, onClick }: { c: KanbanCustomer; onClick: () => void }) 
       {c.regionName && (
         <span className="badge gray kanban-card-region">{c.regionName}</span>
       )}
+      {(c.expectedProducts || []).length > 0 && (
+        <div className="kanban-card-tags">
+          {c.expectedProducts.map((p) => (
+            <span className="badge" key={p} style={{ background: '#dbeafe', color: '#1e40af', fontSize: '0.7rem' }}>{p}</span>
+          ))}
+        </div>
+      )}
       {(c.tags || []).length > 0 && (
         <div className="kanban-card-tags">
           {c.tags.map((t) => (
@@ -101,33 +112,71 @@ function KanbanCard({ c, onClick }: { c: KanbanCustomer; onClick: () => void }) 
 }
 
 function KanbanView({ data, onCustomer }: { data: BoardData; onCustomer: (id: string) => void }) {
+  // Aggregate expected products across all columns
+  const productCounts: Record<string, number> = {};
+  (data.columns || []).forEach((col) =>
+    col.items.forEach((c) =>
+      (c.expectedProducts || []).forEach((p) => {
+        productCounts[p] = (productCounts[p] || 0) + 1;
+      }),
+    ),
+  );
+  const topProducts = Object.entries(productCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
   return (
-    <div className="kanban-board">
-      {(data.columns || []).map((col) => (
-        <div className="kanban-column" key={col.status}>
-          <div className="kanban-column-header" style={{ borderTopColor: statusColors[col.status] || '#cbd5e1' }}>
-            <div className="kanban-column-title">
-              <span className="badge" style={{ background: statusColors[col.status], color: '#fff' }}>
-                {customerStatuses[col.status] || col.status}
-              </span>
-              <span className="kanban-column-count">{col.count}</span>
-            </div>
-            <span className="kanban-column-revenue">{money(col.expectedRevenue)}</span>
-          </div>
-          <div className="kanban-column-body">
-            {col.items.length === 0 && (
-              <p className="kanban-empty">Không có khách hàng</p>
-            )}
-            {col.items.map((c) => (
-              <KanbanCard key={c.id} c={c} onClick={() => onCustomer(c.id)} />
-            ))}
-            {col.count > col.items.length && (
-              <p className="kanban-more">+{col.count - col.items.length} khách hàng khác</p>
-            )}
+    <>
+      {/* Summary bar */}
+      <div className="pipeline-summary">
+        <div className="pipeline-summary-item pipeline-summary-total">
+          <span title="Tổng doanh số dự kiến"><TrendingUp size={18} /></span>
+          <div>
+            <small>Dự kiến tháng này</small>
+            <strong>{money(data.totalExpectedRevenue)}</strong>
           </div>
         </div>
-      ))}
-    </div>
+        {topProducts.length > 0 && (
+          <div className="pipeline-summary-item pipeline-summary-products">
+            <small>Sản phẩm quan tâm:</small>
+            <div className="pipeline-product-tags">
+              {topProducts.map(([name, count]) => (
+                <span className="badge" key={name} style={{ background: '#dbeafe', color: '#1e40af' }}>
+                  {name} <strong>({count})</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="kanban-board">
+        {(data.columns || []).map((col) => (
+          <div className="kanban-column" key={col.status}>
+            <div className="kanban-column-header" style={{ borderTopColor: statusColors[col.status] || '#cbd5e1' }}>
+              <div className="kanban-column-title">
+                <span className="badge" style={{ background: statusColors[col.status], color: '#fff' }}>
+                  {customerStatuses[col.status] || col.status}
+                </span>
+                <span className="kanban-column-count">{col.count}</span>
+              </div>
+              <span className="kanban-column-revenue">{money(col.expectedRevenue)}</span>
+            </div>
+            <div className="kanban-column-body">
+              {col.items.length === 0 && (
+                <p className="kanban-empty">Không có khách hàng</p>
+              )}
+              {col.items.map((c) => (
+                <KanbanCard key={c.id} c={c} onClick={() => onCustomer(c.id)} />
+              ))}
+              {col.count > col.items.length && (
+                <p className="kanban-more">+{col.count - col.items.length} khách hàng khác</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

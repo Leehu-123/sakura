@@ -36,6 +36,7 @@ export class CustomerDto {
   status: CustomerStatus = 'NEW';
   @ApiPropertyOptional() @ValidateIf((_o, v) => v !== undefined && v !== null) @IsUUID() regionId?:
     string | null;
+  @ApiPropertyOptional() @optional() @IsArray() @IsString({ each: true }) expectedProducts: string[] = [];
 }
 export class CustomerUpdateDto extends CustomerDto {
   @ApiProperty() @IsInt() @Min(1) version!: number;

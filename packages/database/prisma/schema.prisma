@@ -254,6 +254,7 @@ model Customer {
   nextContactDate  DateTime?
   lastContactDate  DateTime?
   tags             String[]             @default([])
+  expectedProducts String[]             @default([])
   version          Int                  @default(1)
   createdById      String               @db.Uuid
   createdBy        User                 @relation("CustomerCreator", fields: [createdById], references: [id])

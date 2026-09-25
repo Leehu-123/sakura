@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useResource, State, Modal, Form, Pager, SearchBox } from './shared';
-import { Actor, Page, date, money, orderStatuses } from './types';
+import { Actor, Page, date, money, orderStatuses, customerStatuses } from './types';
 import { api } from '../api';
 import {
   Phone,
@@ -13,6 +13,11 @@ import {
   ClipboardList,
   User,
   Building,
+  AlertTriangle,
+  Users,
+  MessageSquare,
+  Clock,
+  ChevronRight,
 } from 'lucide-react';
 import { Task } from './MyTasks';
 
@@ -33,6 +38,22 @@ type DashboardData = {
 
 type DailyTask = Task & { doneToday?: boolean };
 
+type CareAlerts = {
+  totalManaged: number;
+  overdueCustomers: number;
+  dueSoonCustomers: number;
+  unansweredConversations: number;
+};
+
+type AlertCustomer = {
+  id: string;
+  name: string;
+  phone: string | null;
+  status: string;
+  lastContactDate: string | null;
+  region?: { name: string } | null;
+};
+
 export function MyDashboard({
   actor,
   onCustomer,
@@ -51,6 +72,7 @@ export function MyDashboard({
   // Modals
   const [dailyModal, setDailyModal] = useState<'create' | DailyTask | null>(null);
   const [onceModal, setOnceModal] = useState<'create' | Task | null>(null);
+  const [alertModal, setAlertModal] = useState<string | null>(null); // 'overdue' | 'due-soon' | 'unanswered' | null
 
   // Data fetching
   const dashboard = useResource<DashboardData>('/sales/dashboard/my', revision);
@@ -64,7 +86,7 @@ export function MyDashboard({
       (taskSearch ? '&search=' + encodeURIComponent(taskSearch) : ''),
     revision,
   );
-
+  const careAlerts = useResource<CareAlerts>('/sales/dashboard/care-alerts', revision);
   const monthYear = new Intl.DateTimeFormat('vi-VN', {
     month: 'long',
     year: 'numeric',
@@ -146,6 +168,58 @@ export function MyDashboard({
             </div>
           );
         })()}
+
+      {/* CARE ALERTS SECTION */}
+      {careAlerts.data && (
+        <div className="care-alerts-grid" style={{ marginTop: 16 }}>
+          <button
+            className="care-alert-card care-alert--total"
+            onClick={() => onCustomer && onCustomer('')}
+          >
+            <span className="care-alert-icon"><Users size={20} /></span>
+            <div>
+              <small>Tổng khách quản lý</small>
+              <strong>{careAlerts.data.totalManaged}</strong>
+            </div>
+          </button>
+          <button
+            className="care-alert-card care-alert--danger"
+            onClick={() => setAlertModal('overdue')}
+            disabled={!careAlerts.data.overdueCustomers}
+          >
+            <span className="care-alert-icon"><AlertTriangle size={20} /></span>
+            <div>
+              <small>Quá hạn chăm sóc</small>
+              <strong>{careAlerts.data.overdueCustomers}</strong>
+            </div>
+            {careAlerts.data.overdueCustomers > 0 && <ChevronRight size={16} className="care-alert-arrow" />}
+          </button>
+          <button
+            className="care-alert-card care-alert--warning"
+            onClick={() => setAlertModal('due-soon')}
+            disabled={!careAlerts.data.dueSoonCustomers}
+          >
+            <span className="care-alert-icon"><Clock size={20} /></span>
+            <div>
+              <small>Sắp đến hạn</small>
+              <strong>{careAlerts.data.dueSoonCustomers}</strong>
+            </div>
+            {careAlerts.data.dueSoonCustomers > 0 && <ChevronRight size={16} className="care-alert-arrow" />}
+          </button>
+          <button
+            className="care-alert-card care-alert--info"
+            onClick={() => setAlertModal('unanswered')}
+            disabled={!careAlerts.data.unansweredConversations}
+          >
+            <span className="care-alert-icon"><MessageSquare size={20} /></span>
+            <div>
+              <small>Chờ trả lời tin nhắn</small>
+              <strong>{careAlerts.data.unansweredConversations}</strong>
+            </div>
+            {careAlerts.data.unansweredConversations > 0 && <ChevronRight size={16} className="care-alert-arrow" />}
+          </button>
+        </div>
+      )}
 
       {/* 2. TASKS WORKSPACE SECTION */}
       <div className="overview-grid" style={{ marginTop: 24 }}>
@@ -526,6 +600,15 @@ export function MyDashboard({
           }}
         />
       )}
+
+      {/* MODAL 3: CARE ALERT CUSTOMER LIST */}
+      {alertModal && (
+        <CareAlertModal
+          type={alertModal}
+          close={() => setAlertModal(null)}
+          onCustomer={onCustomer}
+        />
+      )}
     </div>
   );
 }
@@ -748,6 +831,100 @@ function OneTimeTaskModal({
           )}
         </div>
       </Form>
+    </Modal>
+  );
+}
+
+// Modal showing list of customers for a care alert type
+function CareAlertModal({
+  type,
+  close,
+  onCustomer,
+}: {
+  type: string;
+  close: () => void;
+  onCustomer?: (id: string) => void;
+}) {
+  const [page, setPage] = useState(1);
+  const alertTitles: Record<string, string> = {
+    overdue: '🔴 Khách quá hạn chăm sóc',
+    'due-soon': '🟡 Khách sắp đến hạn',
+    unanswered: '🟠 Hội thoại chờ trả lời',
+  };
+
+  const data = useResource<Page<AlertCustomer>>(
+    '/sales/dashboard/care-alerts/' + type + '?page=' + page + '&pageSize=15',
+  );
+
+  return (
+    <Modal title={alertTitles[type] || 'Danh sách khách hàng'} close={close}>
+      <State loading={data.loading} error={data.error} />
+      {data.data && (
+        <>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên</th>
+                  <th>SĐT</th>
+                  <th>Trạng thái</th>
+                  <th>Liên hệ gần nhất</th>
+                  <th>Vùng</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data.data.items || []).map((c: any) => {
+                  const customer = c.customer || c;
+                  const name = customer.facebookName || customer.name || '—';
+                  const phone = customer.phone || '';
+                  const status = customer.status || '';
+                  const lastContact = customer.lastContactDate || c.lastInboundAt || null;
+                  const regionName = customer.region?.name || '';
+                  const customerId = customer.id || c.customerId;
+
+                  return (
+                    <tr key={c.id || customer.id}>
+                      <td>
+                        {customerId && onCustomer ? (
+                          <button
+                            className="text-button link-button"
+                            onClick={() => {
+                              onCustomer(customerId);
+                              close();
+                            }}
+                          >
+                            {name}
+                          </button>
+                        ) : (
+                          name
+                        )}
+                      </td>
+                      <td>{phone || '—'}</td>
+                      <td>
+                        {status && (
+                          <span className="badge">
+                            {customerStatuses[status] || status}
+                          </span>
+                        )}
+                      </td>
+                      <td>{lastContact ? date(lastContact) : '—'}</td>
+                      <td>{regionName || '—'}</td>
+                    </tr>
+                  );
+                })}
+                {!(data.data.items || []).length && (
+                  <tr>
+                    <td colSpan={5} className="empty">
+                      Không có khách hàng nào.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pager data={data.data} page={page} setPage={setPage} />
+        </>
+      )}
     </Modal>
   );
 }
