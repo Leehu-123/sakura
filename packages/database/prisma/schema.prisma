@@ -251,6 +251,8 @@ model Customer {
   regionId         String?              @db.Uuid
   region           Region?              @relation(fields: [regionId], references: [id])
   expectedRevenue  Decimal?             @db.Decimal(15, 0)
+  closingProbability Int?
+  expectedItems Json @default("[]")
   nextContactDate  DateTime?
   lastContactDate  DateTime?
   tags             String[]             @default([])

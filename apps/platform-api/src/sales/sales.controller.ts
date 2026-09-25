@@ -18,6 +18,7 @@ import { SalesReports, ReportsController } from './reports';
 import { VersionDto } from '../common/version';
 import {
   CustomerDto,
+  PipelineUpdateDto,
   CustomerUpdateDto,
   CustomerQuery,
   HandoffDto,
@@ -86,6 +87,15 @@ export class SalesController {
   @ApiOperation({ summary: 'Hồ sơ, 100 ghi chú và 100 phân công gần nhất' })
   customer(@CurrentUser() actor: Principal, @Param('id', ParseUUIDPipe) id: string) {
     return this.sales.customerDetail(actor, id);
+  }
+  @Patch('customers/:id/pipeline')
+  @RequirePermission('sales.customers.manage', 'ASSIGNED')
+  updatePipeline(
+    @CurrentUser() actor: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PipelineUpdateDto,
+  ) {
+    return this.sales.updatePipeline(actor, id, dto);
   }
   @Patch('customers/:id')
   @RequirePermission('sales.customers.manage', 'ASSIGNED')

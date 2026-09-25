@@ -1,3 +1,4 @@
+import { summarizePipeline, probability, forecastRevenue } from './pipeline';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@sakura/database';
 import { Database } from '../db';
@@ -12,8 +13,10 @@ export class DashboardService {
     const now = new Date();
     const today = new Date(now.getTime() + 7 * 3600000).toISOString().slice(0, 10);
     const startOfMonth = new Date(today.slice(0, 8) + '01T00:00:00+07:00');
-    
-    const kpiResult = await this.db.$queryRaw<{ ordersThisMonth: bigint, revenue: string, paid: string }[]>`
+
+    const kpiResult = await this.db.$queryRaw<
+      { ordersThisMonth: bigint; revenue: string; paid: string }[]
+    >`
       SELECT 
         COUNT(id) as "ordersThisMonth",
         COALESCE(SUM(total), 0) as revenue,
@@ -29,9 +32,9 @@ export class DashboardService {
     const paid = Number(kpi.paid) || 0;
 
     const isGlobal = hasPermission(actor.grants, 'sales.orders.read', 'GLOBAL');
-    
+
     const recentOrders = await this.db.order.findMany({
-      where: isGlobal 
+      where: isGlobal
         ? { closedByUserId: actor.id }
         : {
             OR: [
@@ -57,166 +60,146 @@ export class DashboardService {
   }
 
   async myPipeline(actor: Principal) {
-    const isGlobal = hasPermission(actor.grants, 'sales.customers.read', 'GLOBAL');
-
-    let whereClause = Prisma.empty;
-    if (!isGlobal) {
-      whereClause = Prisma.sql`
-        WHERE EXISTS (
-          SELECT 1 FROM "CustomerAssignment" a 
-          WHERE a."customerId" = "Customer".id 
-            AND a."endedAt" IS NULL 
-            AND a."userId" = ${actor.id}::uuid
-        )
-      `;
-    }
-
-    const pipeline = await this.db.$queryRaw<{ status: string, count: bigint, expectedRevenue: string }[]>`
-      SELECT 
-        status,
-        COUNT(id) as count,
-        COALESCE(SUM("expectedRevenue"), 0) as "expectedRevenue"
-      FROM "Customer"
-      ${whereClause}
-      GROUP BY status
-    `;
-
-    const statusMap = new Map(pipeline.map(p => [p.status, {
-      status: p.status,
-      count: Number(p.count),
-      expectedRevenue: String(Number(p.expectedRevenue) || 0),
-    }]));
-
-    const standardStatuses = ['NEW', 'CONSULTING', 'WON', 'RETURNING', 'INACTIVE'];
-    const result = standardStatuses.map(s => statusMap.get(s) || {
-      status: s,
-      count: 0,
-      expectedRevenue: '0',
+    const rows = await this.db.customer.findMany({
+      where: customerPredicate(actor),
+      select: {
+        status: true,
+        closingProbability: true,
+        expectedRevenue: true,
+        expectedItems: true,
+        expectedProducts: true,
+      },
     });
-
-    const totalExpected = result.reduce((sum, item) => sum + Number(item.expectedRevenue), 0);
-
-    return { groups: result, totalExpected: String(totalExpected) };
+    const summary = summarizePipeline(rows);
+    return { ...summary, totalExpected: summary.totalExpectedRevenue };
   }
 
   async myPipelineBoard(actor: Principal) {
-    const isGlobal = hasPermission(actor.grants, 'sales.customers.read', 'GLOBAL');
-
-    const assignmentFilter: Prisma.CustomerWhereInput = isGlobal
-      ? {}
-      : { assignments: { some: { userId: actor.id, endedAt: null } } };
-
-    const standardStatuses = ['NEW', 'CONSULTING', 'WON', 'RETURNING', 'INACTIVE'] as const;
-    const now = new Date();
-
-    const columns = await Promise.all(
-      standardStatuses.map(async (status) => {
-        const [items, count] = await this.db.$transaction([
-          this.db.customer.findMany({
-            where: { ...assignmentFilter, status },
-            select: {
-              id: true,
-              name: true,
-              phone: true,
-              expectedRevenue: true,
-              nextContactDate: true,
-              lastContactDate: true,
-              tags: true,
-              expectedProducts: true,
-              region: { select: { name: true } },
-            },
-            orderBy: [
-              { lastContactDate: { sort: 'asc', nulls: 'first' } },
-              { nextContactDate: { sort: 'asc', nulls: 'first' } },
-              { name: 'asc' },
-            ],
-            take: 30,
-          }),
-          this.db.customer.count({ where: { ...assignmentFilter, status } }),
-        ]);
-
-        const revenueResult = await this.db.$queryRaw<{ total: string }[]>`
-          SELECT COALESCE(SUM("expectedRevenue"), 0)::text as total
-          FROM "Customer"
-          WHERE status = ${status}::"CustomerStatus"
-          ${isGlobal ? Prisma.empty : Prisma.sql`
-            AND EXISTS (
-              SELECT 1 FROM "CustomerAssignment" a
-              WHERE a."customerId" = "Customer".id
-                AND a."endedAt" IS NULL
-                AND a."userId" = ${actor.id}::uuid
-            )
-          `}
-        `;
-
-        const mappedItems = items.map((c) => {
-          const lastContact = c.lastContactDate ? c.lastContactDate.getTime() : null;
-          const nextContact = c.nextContactDate ? c.nextContactDate.getTime() : null;
-          const daysSinceContact = lastContact
-            ? Math.floor((now.getTime() - lastContact) / 86400000)
-            : null;
-          const daysUntilNext = nextContact
-            ? Math.floor((nextContact - now.getTime()) / 86400000)
-            : null;
-
-          let urgency: 'overdue' | 'due-soon' | 'ok' = 'ok';
-          
-          if (daysUntilNext !== null && daysUntilNext < 0) {
-            urgency = 'overdue';
-          } else if (daysUntilNext !== null && daysUntilNext <= 2) {
-            urgency = 'due-soon';
-          } else if (status === 'NEW') {
-            if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 3)) {
-              urgency = 'overdue';
-            } else if (daysSinceContact !== null && daysSinceContact > 1) {
-              urgency = 'due-soon';
-            }
-          } else if (status === 'CONSULTING') {
-            if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 7)) {
-              urgency = 'overdue';
-            } else if (daysSinceContact !== null && daysSinceContact > 5) {
-              urgency = 'due-soon';
-            }
-          } else if (status === 'RETURNING' || status === 'INACTIVE') {
-            if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 15)) {
-              urgency = 'overdue';
-            } else if (daysSinceContact !== null && daysSinceContact > 10) {
-              urgency = 'due-soon';
-            }
-          }
-
-          return {
-            id: c.id,
-            name: c.name,
-            phone: c.phone,
-            expectedRevenue: c.expectedRevenue ? String(Number(c.expectedRevenue)) : null,
-            lastContactDate: c.lastContactDate?.toISOString() || null,
-            nextContactDate: c.nextContactDate?.toISOString() || null,
-            daysSinceContact,
-            daysUntilNext,
-            urgency,
-            tags: c.tags,
-            expectedProducts: c.expectedProducts,
-            regionName: c.region?.name || null,
-          };
+    const assignmentFilter = customerPredicate(actor);
+    return this.db.$transaction(
+      async (tx) => {
+        const allForecasts = await tx.customer.findMany({
+          where: assignmentFilter,
+          select: {
+            status: true,
+            expectedRevenue: true,
+            closingProbability: true,
+            expectedItems: true,
+            expectedProducts: true,
+          },
         });
+        const summary = summarizePipeline(allForecasts);
+        const standardStatuses = ['NEW', 'CONSULTING', 'WON', 'RETURNING', 'INACTIVE'] as const;
+        const now = new Date();
 
-        // Sort: overdue first, then due-soon, then ok
-        const urgencyOrder = { overdue: 0, 'due-soon': 1, ok: 2 };
-        mappedItems.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
+        const columns = await Promise.all(
+          standardStatuses.map(async (status) => {
+            const items = await tx.customer.findMany({
+              where: { AND: [assignmentFilter, { status }] },
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                version: true,
+                status: true,
+                expectedRevenue: true,
+                closingProbability: true,
+                expectedItems: true,
+                nextContactDate: true,
+                lastContactDate: true,
+                tags: true,
+                expectedProducts: true,
+                region: { select: { name: true } },
+                assignments: { where: { userId: actor.id, endedAt: null }, select: { id: true } },
+              },
+              orderBy: [
+                { lastContactDate: { sort: 'asc', nulls: 'first' } },
+                { nextContactDate: { sort: 'asc', nulls: 'first' } },
+                { name: 'asc' },
+                { id: 'asc' },
+              ],
+              take: 30,
+            });
+            const group = summary.groups.find((g) => g.status === status)!;
+            const mappedItems = items.map((c) => {
+              const lastContact = c.lastContactDate ? c.lastContactDate.getTime() : null;
+              const nextContact = c.nextContactDate ? c.nextContactDate.getTime() : null;
+              const daysSinceContact = lastContact
+                ? Math.floor((now.getTime() - lastContact) / 86400000)
+                : null;
+              const daysUntilNext = nextContact
+                ? Math.floor((nextContact - now.getTime()) / 86400000)
+                : null;
 
-        return {
-          status,
-          count,
-          expectedRevenue: revenueResult[0]?.total || '0',
-          items: mappedItems,
-        };
-      }),
+              let urgency: 'overdue' | 'due-soon' | 'ok' = 'ok';
+
+              if (daysUntilNext !== null && daysUntilNext < 0) {
+                urgency = 'overdue';
+              } else if (daysUntilNext !== null && daysUntilNext <= 2) {
+                urgency = 'due-soon';
+              } else if (status === 'NEW') {
+                if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 3)) {
+                  urgency = 'overdue';
+                } else if (daysSinceContact !== null && daysSinceContact > 1) {
+                  urgency = 'due-soon';
+                }
+              } else if (status === 'CONSULTING') {
+                if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 7)) {
+                  urgency = 'overdue';
+                } else if (daysSinceContact !== null && daysSinceContact > 5) {
+                  urgency = 'due-soon';
+                }
+              } else if (status === 'RETURNING' || status === 'INACTIVE') {
+                if (lastContact === null || (daysSinceContact !== null && daysSinceContact > 15)) {
+                  urgency = 'overdue';
+                } else if (daysSinceContact !== null && daysSinceContact > 10) {
+                  urgency = 'due-soon';
+                }
+              }
+
+              return {
+                id: c.id,
+                version: c.version,
+                status: c.status,
+                closingProbability: c.closingProbability,
+                effectiveProbability: probability(c),
+                weightedRevenue: forecastRevenue(c.expectedRevenue, probability(c)).toFixed(0),
+                expectedItems: c.expectedItems,
+                canManage:
+                  hasPermission(actor.grants, 'sales.customers.manage', 'GLOBAL') ||
+                  (hasPermission(actor.grants, 'sales.customers.manage', 'ASSIGNED') &&
+                    c.assignments.length > 0),
+                name: c.name,
+                phone: c.phone,
+                expectedRevenue: c.expectedRevenue?.toString() ?? null,
+                lastContactDate: c.lastContactDate?.toISOString() || null,
+                nextContactDate: c.nextContactDate?.toISOString() || null,
+                daysSinceContact,
+                daysUntilNext,
+                urgency,
+                tags: c.tags,
+                expectedProducts: c.expectedProducts,
+                regionName: c.region?.name || null,
+              };
+            });
+
+            // Sort: overdue first, then due-soon, then ok
+            const urgencyOrder = { overdue: 0, 'due-soon': 1, ok: 2 };
+            mappedItems.sort((a, b) => urgencyOrder[a.urgency] - urgencyOrder[b.urgency]);
+
+            return {
+              status,
+              count: group.count,
+              expectedRevenue: group.expectedRevenue,
+              items: mappedItems,
+            };
+          }),
+        );
+
+        return { ...summary, columns };
+      },
+      { isolationLevel: 'RepeatableRead', timeout: 15000 },
     );
-
-    const totalExpectedRevenue = columns.reduce((sum, col) => sum + Number(col.expectedRevenue), 0);
-
-    return { columns, totalExpectedRevenue: String(totalExpectedRevenue) };
   }
 
   async myCustomers(actor: Principal, query: CustomerQuery) {
@@ -246,21 +229,27 @@ export class DashboardService {
       ],
     };
 
-    const [items, total] = await this.db.$transaction([
-      this.db.customer.findMany({
-        where,
-        include: {
-          region: true,
-          assignments: { where: { endedAt: null }, include: { user: { select: { id: true, displayName: true } } } },
-        },
-        orderBy: [{ lastContactDate: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
-        skip: (query.page - 1) * query.pageSize,
-        take: query.pageSize,
-      }),
-      this.db.customer.count({ where }),
-    ], { isolationLevel: 'RepeatableRead' });
+    const [items, total] = await this.db.$transaction(
+      [
+        this.db.customer.findMany({
+          where,
+          include: {
+            region: true,
+            assignments: {
+              where: { endedAt: null },
+              include: { user: { select: { id: true, displayName: true } } },
+            },
+          },
+          orderBy: [{ lastContactDate: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
+          skip: (query.page - 1) * query.pageSize,
+          take: query.pageSize,
+        }),
+        this.db.customer.count({ where }),
+      ],
+      { isolationLevel: 'RepeatableRead' },
+    );
 
-    const customerIds = items.map(c => c.id);
+    const customerIds = items.map((c) => c.id);
     const lastActivities = await this.db.careActivity.findMany({
       where: { customerId: { in: customerIds } },
       orderBy: { createdAt: 'desc' },
@@ -268,12 +257,18 @@ export class DashboardService {
       select: { customerId: true, note: true, createdAt: true },
     });
 
-    const activityMap = new Map(lastActivities.map(a => [a.customerId, a]));
+    const activityMap = new Map(lastActivities.map((a) => [a.customerId, a]));
 
-    const mappedItems = items.map(c => {
+    const mappedItems = items.map((c) => {
       const activity = activityMap.get(c.id);
       return {
         ...c,
+        effectiveProbability: probability(c),
+        weightedRevenue: forecastRevenue(c.expectedRevenue, probability(c)).toFixed(0),
+        canManage:
+          hasPermission(actor.grants, 'sales.customers.manage', 'GLOBAL') ||
+          (hasPermission(actor.grants, 'sales.customers.manage', 'ASSIGNED') &&
+            c.assignments.some((a) => a.userId === actor.id)),
         lastActivityDate: activity?.createdAt || null,
         lastActivityNotePreview: activity?.note ? activity.note.substring(0, 100) : null,
       };
@@ -303,8 +298,14 @@ export class DashboardService {
         ...assignmentFilter,
         OR: [
           { status: 'NEW', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff3 } }] },
-          { status: 'CONSULTING', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff7 } }] },
-          { status: { in: ['RETURNING', 'INACTIVE'] }, OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff15 } }] },
+          {
+            status: 'CONSULTING',
+            OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff7 } }],
+          },
+          {
+            status: { in: ['RETURNING', 'INACTIVE'] },
+            OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff15 } }],
+          },
           { nextContactDate: { lt: now } },
         ],
       },
@@ -316,7 +317,10 @@ export class DashboardService {
         OR: [
           { status: 'NEW', lastContactDate: { gte: cutoff3, lt: cutoff1 } },
           { status: 'CONSULTING', lastContactDate: { gte: cutoff7, lt: cutoff5 } },
-          { status: { in: ['RETURNING', 'INACTIVE'] }, lastContactDate: { gte: cutoff15, lt: cutoff10 } },
+          {
+            status: { in: ['RETURNING', 'INACTIVE'] },
+            lastContactDate: { gte: cutoff15, lt: cutoff10 },
+          },
           { nextContactDate: { gte: now, lt: new Date(now.getTime() + 2 * 86400000) } },
         ],
       },
@@ -371,42 +375,53 @@ export class DashboardService {
             AND blocked = false
             AND "lastInboundAt" IS NOT NULL
             AND ("lastSentAt" IS NULL OR "lastSentAt" < "lastInboundAt")
-        `
+        `,
       ]);
 
-      const customerIds = items.map(i => i.customerId).filter(Boolean);
-      const customers = customerIds.length ? await this.db.customer.findMany({
-        where: { id: { in: customerIds } }
-      }) : [];
-      const customerMap = new Map(customers.map(c => [c.id, c]));
+      const customerIds = items.map((i) => i.customerId).filter(Boolean);
+      const customers = customerIds.length
+        ? await this.db.customer.findMany({
+            where: { id: { in: customerIds } },
+          })
+        : [];
+      const customerMap = new Map(customers.map((c) => [c.id, c]));
 
-      const mappedItems = items.map(item => ({
+      const mappedItems = items.map((item) => ({
         ...item,
-        customer: item.customerId ? customerMap.get(item.customerId) : null
+        customer: item.customerId ? customerMap.get(item.customerId) : null,
       }));
 
       return {
         items: mappedItems,
         total: Number(totalRes[0]?.count || 0n),
         page: query.page,
-        pageSize: query.pageSize
+        pageSize: query.pageSize,
       };
     }
 
     let whereCondition: Prisma.CustomerWhereInput = { ...assignmentFilter };
-    
+
     if (type === 'overdue') {
       whereCondition.OR = [
         { status: 'NEW', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff3 } }] },
-        { status: 'CONSULTING', OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff7 } }] },
-        { status: { in: ['RETURNING', 'INACTIVE'] }, OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff15 } }] },
+        {
+          status: 'CONSULTING',
+          OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff7 } }],
+        },
+        {
+          status: { in: ['RETURNING', 'INACTIVE'] },
+          OR: [{ lastContactDate: null }, { lastContactDate: { lt: cutoff15 } }],
+        },
         { nextContactDate: { lt: now } },
       ];
     } else if (type === 'due-soon') {
       whereCondition.OR = [
         { status: 'NEW', lastContactDate: { gte: cutoff3, lt: cutoff1 } },
         { status: 'CONSULTING', lastContactDate: { gte: cutoff7, lt: cutoff5 } },
-        { status: { in: ['RETURNING', 'INACTIVE'] }, lastContactDate: { gte: cutoff15, lt: cutoff10 } },
+        {
+          status: { in: ['RETURNING', 'INACTIVE'] },
+          lastContactDate: { gte: cutoff15, lt: cutoff10 },
+        },
         { nextContactDate: { gte: now, lt: new Date(now.getTime() + 2 * 86400000) } },
       ];
     }
@@ -416,7 +431,10 @@ export class DashboardService {
         where: whereCondition,
         include: {
           region: true,
-          assignments: { where: { endedAt: null }, include: { user: { select: { id: true, displayName: true } } } },
+          assignments: {
+            where: { endedAt: null },
+            include: { user: { select: { id: true, displayName: true } } },
+          },
         },
         orderBy: [{ lastContactDate: { sort: 'asc', nulls: 'first' } }, { id: 'asc' }],
         skip: (query.page - 1) * query.pageSize,

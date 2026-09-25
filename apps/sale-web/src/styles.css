@@ -2839,3 +2839,23 @@ dialog::backdrop {
   gap: 6px;
   align-items: center;
 }
+
+/* Weighted pipeline forecasts and stage movement */
+.forecast-summary { align-items: stretch; }
+.forecast-summary > div { flex: 1; min-width: 230px; }
+.forecast-summary strong { overflow-wrap: anywhere; }
+.forecast-breakdown { padding: 14px 18px; margin: 12px 0 20px; }
+.forecast-breakdown summary { cursor: pointer; font-weight: 600; }
+.forecast-notice { padding: 10px 14px; background: #fff8e6; color: #755317; border-radius: 8px; font-size: 13px; }
+.forecast-item-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+.forecast-item-row label { min-width: 0; }
+.forecast-item-row input { width: 100%; }
+.pipeline-card-actions { display:flex; gap:8px; align-items:center; margin-top:12px; }
+.pipeline-card-actions select { min-width:0; flex:1; font-size:12px; padding:6px; }
+.pipeline-edit { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.kanban-card[draggable=true] { cursor:grab; }
+.kanban-card.dragging { opacity:.45; }
+.kanban-column.drop-target { background:#fce7ef; outline:2px dashed #ad2358; outline-offset:-2px; }
+.kanban-card .kanban-card-name { text-align:left; }
+.kanban-card .kanban-card-header > svg { color:#94a3b8; flex-shrink:0; }
+@media(max-width:600px) { .forecast-item-row {grid-template-columns:1fr 1fr;} .forecast-item-row label:first-child {grid-column:1/-1;} .forecast-summary {flex-wrap:wrap;} }

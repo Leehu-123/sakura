@@ -154,6 +154,7 @@ const actions: Record<string, string> = {
   'import.committed': 'Xác nhận nhập Sapo',
   'customer.created': 'Tạo khách',
   'customer.updated': 'Cập nhật khách',
+  'customer.pipeline_updated': 'Cập nhật pipeline và dự báo',
   'customer.handoff': 'Bàn giao khách',
   'customer.care_added': 'Thêm ghi chú chăm sóc',
   'product.created': 'Tạo sản phẩm',

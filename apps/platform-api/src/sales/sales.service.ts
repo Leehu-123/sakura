@@ -10,6 +10,7 @@ import { Database } from '../db';
 import { Principal, customerPredicate, orderPredicate, hasPermission } from '../auth/policy';
 import {
   CustomerDto,
+  PipelineUpdateDto,
   CustomerUpdateDto,
   CustomerQuery,
   HandoffDto,
@@ -183,6 +184,46 @@ export class SalesService {
         },
       });
       return updated;
+    });
+  }
+  async updatePipeline(actor: Principal, id: string, dto: PipelineUpdateDto) {
+    return this.transaction(async (tx) => {
+      const old = await this.customer(tx, actor, id, 'sales.customers.manage');
+      checkVersion(old.version, dto.version);
+      const { version, expectedItems, ...data } = dto;
+      const updated = await tx.customer.update({
+        where: { id, version },
+        data: {
+          ...data,
+          ...(expectedItems !== undefined
+            ? { expectedItems: expectedItems.map((i) => ({ ...i })) }
+            : {}),
+          version: { increment: 1 },
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'customer.pipeline_updated',
+          entity: 'Customer',
+          entityId: id,
+          metadata: {
+            before: {
+              status: old.status,
+              expectedRevenue: old.expectedRevenue?.toString() ?? null,
+              closingProbability: old.closingProbability,
+              expectedItems: old.expectedItems,
+            },
+            after: {
+              status: updated.status,
+              expectedRevenue: updated.expectedRevenue?.toString() ?? null,
+              closingProbability: updated.closingProbability,
+              expectedItems: updated.expectedItems,
+            },
+          },
+        },
+      });
+      return { id: updated.id, version: updated.version, status: updated.status };
     });
   }
   async assignees() {

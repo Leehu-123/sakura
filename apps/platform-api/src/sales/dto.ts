@@ -5,6 +5,7 @@ import {
   IsString,
   IsUUID,
   IsInt,
+  IsNumber,
   IsEnum,
   IsArray,
   IsBoolean,
@@ -21,6 +22,34 @@ import {
 import { CustomerStatus, OrderStatus, ShippingStatus } from '@sakura/database';
 import { PageDto } from '../core/dto';
 const optional = () => ValidateIf((_o, value) => value !== undefined);
+export class ForecastItemDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(150)
+  name!: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(30)
+  unit!: string;
+  @IsNumber({ maxDecimalPlaces: 2 }) @Min(0.01) @Max(1000000000) quantity!: number;
+}
+export class PipelineUpdateDto extends VersionDto {
+  @optional() @IsEnum(CustomerStatus) status?: CustomerStatus;
+  @ValidateIf((_o, v) => v !== undefined && v !== null)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  closingProbability?: number | null;
+  @optional() @IsString() @Matches(/^\d{1,15}$/) expectedRevenue?: string;
+  @optional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ForecastItemDto)
+  expectedItems?: ForecastItemDto[];
+}
 export class CustomerDto {
   @ApiProperty()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -36,7 +65,11 @@ export class CustomerDto {
   status: CustomerStatus = 'NEW';
   @ApiPropertyOptional() @ValidateIf((_o, v) => v !== undefined && v !== null) @IsUUID() regionId?:
     string | null;
-  @ApiPropertyOptional() @optional() @IsArray() @IsString({ each: true }) expectedProducts: string[] = [];
+  @ApiPropertyOptional()
+  @optional()
+  @IsArray()
+  @IsString({ each: true })
+  expectedProducts: string[] = [];
 }
 export class CustomerUpdateDto extends CustomerDto {
   @ApiProperty() @IsInt() @Min(1) version!: number;

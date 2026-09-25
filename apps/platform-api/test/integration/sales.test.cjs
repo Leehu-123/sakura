@@ -587,3 +587,36 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
     },
   );
 });
+
+test('Pipeline: totals include hidden cards; moves are scoped, versioned and preserve customer details', async () => {
+  const user = await db.user.create({data:{email:'pipeline-owner@test.local',displayName:'Pipeline owner',passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId:regionalRole.id}}}});
+  const jwt = await mint(user.id);
+  const req = (method,path,body) => { const r=http()[method]('/api/v1'+path).set('Authorization','Bearer '+jwt);return body===undefined?r:r.send(body); };
+  const rows=[];
+  for(let i=0;i<31;i++)rows.push(await db.customer.create({data:{name:'Pipeline '+String(i).padStart(2,'0'),address:'Keep address',status:'CONSULTING',expectedRevenue:'1000',closingProbability:50,expectedProducts:['Ribbon'],expectedItems:[{name:'Ribbon',unit:'cuộn',quantity:2}],createdById:admin.id,assignments:{create:{userId:user.id,assignedById:admin.id,reason:"Pipeline test"}}}}));
+  const foreign=await db.customer.create({data:{name:'Outside pipeline',status:'WON',expectedRevenue:'99999999',createdById:admin.id}});
+  let board=(await req('get','/sales/dashboard/pipeline-board').expect(200)).body;
+  assert.equal(board.totalExpectedRevenue,'15500');
+  assert.equal(board.columns.find(c=>c.status==='CONSULTING').items.length,30);
+  assert.equal(board.columns.find(c=>c.status==='CONSULTING').count,31);
+  assert.equal(board.expectedShipments[0].quantity,'31.00');
+  assert.equal(board.columns.find(c=>c.status==='CONSULTING').items[0].canManage,true);
+  const c=rows[0],url='/sales/customers/'+c.id+'/pipeline';
+  await req('patch',url,{version:c.version,closingProbability:101}).expect(400);
+  await req('patch',url,{version:c.version,expectedItems:[{name:'Ribbon',unit:'cuộn',quantity:-1}]}).expect(400);
+  await req('patch','/sales/customers/'+foreign.id+'/pipeline',{version:foreign.version,status:'NEW'}).expect(404);
+  await req('patch',url,{version:c.version,status:'WON'}).expect(200);
+  await req('patch',url,{version:c.version,status:'INACTIVE'}).expect(409);
+  const saved=await db.customer.findUniqueOrThrow({where:{id:c.id}});
+  assert.equal(saved.status,'WON');assert.equal(saved.address,'Keep address');assert.equal(saved.expectedRevenue.toString(),'1000');assert.equal(saved.closingProbability,50);
+  assert.equal(await db.auditLog.count({where:{entityId:c.id,action:'customer.pipeline_updated'}}),1);
+  board=(await req('get','/sales/dashboard/pipeline-board').expect(200)).body;
+  assert.equal(board.totalExpectedRevenue,'16000');assert.equal(board.expectedShipments[0].quantity,'32.00');
+  await req('patch',url,{version:saved.version,status:'INACTIVE'}).expect(200);
+  board=(await req('get','/sales/dashboard/pipeline-board').expect(200)).body;
+  assert.equal(board.totalExpectedRevenue,'15000');
+  const table=(await req('get','/sales/dashboard/customers?page=1&pageSize=100').expect(200)).body;
+  assert.equal(table.total,31);assert.equal(table.items.find(x=>x.id===c.id).effectiveProbability,0);
+  const denied=await db.user.create({data:{email:'pipeline-denied@test.local',displayName:'No pipeline permissions',passwordHash:admin.passwordHash,mustChangePassword:false}});
+  await http().patch('/api/v1'+url).set('Authorization','Bearer '+await mint(denied.id)).send({version:saved.version+1,status:'NEW'}).expect(403);
+});
