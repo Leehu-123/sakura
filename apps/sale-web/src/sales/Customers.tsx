@@ -30,7 +30,7 @@ function CustomerForm({
   close: () => void;
 }) {
   const regions = useResource<Region[]>('/sales/regions');
-  const products = useResource<Product[]>('/catalog/products');
+  const products = useResource<Page<Product>>('/catalog/products');
   const [selectedProducts, setSelectedProducts] = useState<string[]>(
     customer?.expectedProducts || [],
   );
@@ -131,7 +131,7 @@ function CustomerForm({
                 minHeight: 40,
               }}
             >
-              {products.data?.filter((p) => p.isActive).map((p) => {
+              {products.data?.items.filter((p) => p.isActive).map((p) => {
                 const isSelected = selectedProducts.includes(p.name);
                 return (
                   <button
@@ -153,10 +153,12 @@ function CustomerForm({
                   </button>
                 );
               })}
-              {!products.data?.length && <span className="muted">Không có sản phẩm</span>}
+              {products.data && !products.data.items.some((p) => p.isActive) && (
+                <span className="muted">Không có sản phẩm</span>
+              )}
             </div>
           </label>
-          <State loading={regions.loading} error={regions.error} />
+          <State loading={products.loading} error={products.error} />
           {!customer && (
             <p className="muted">
               Khách mới được giao cho bạn chăm sóc. Sale tổng hoặc Admin có thể bàn giao sau.

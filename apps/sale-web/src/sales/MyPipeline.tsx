@@ -52,7 +52,7 @@ function ForecastEditor({
   close: () => void;
   done: () => void;
 }) {
-  const products = useResource<Product[]>(
+  const products = useResource<Page<Product>>(
     '/catalog/products',
     0,
     has(actor, 'catalog.products.read'),
@@ -125,9 +125,10 @@ function ForecastEditor({
           Nhập số lượng nếu chốt thành công. Dự báo xuất sẽ nhân với cùng tỷ lệ chốt; đây chưa phải
           lệnh xuất kho.
         </p>
+        <State loading={products.loading} error={products.error} />
         <datalist id="pipeline-product-options">
-          {products.data
-            ?.filter((p) => p.isActive)
+          {products.data?.items
+            .filter((p) => p.isActive)
             .map((p) => (
               <option key={p.id} value={p.name} />
             ))}
