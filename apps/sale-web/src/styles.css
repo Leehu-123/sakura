@@ -2848,6 +2848,13 @@ dialog::backdrop {
 .forecast-breakdown summary { cursor: pointer; font-weight: 600; }
 .forecast-notice { padding: 10px 14px; background: #fff8e6; color: #755317; border-radius: 8px; font-size: 13px; }
 .forecast-item-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+.catalog-product-search { margin: 12px 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.catalog-product-results { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; margin-top: 8px; }
+.catalog-product-results button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 8px 10px; }
+.catalog-product-results button span { font-weight: 600; overflow-wrap: anywhere; }
+.catalog-product-results button small { color: #64748b; overflow-wrap: anywhere; }
+.selected-product-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.selected-product-chips button { border-radius: 18px; background: #fce7f0; color: #9d174d; padding: 5px 10px; }
 .forecast-item-row label { min-width: 0; }
 .forecast-item-row input { width: 100%; }
 .pipeline-card-actions { display:flex; gap:8px; align-items:center; margin-top:12px; }

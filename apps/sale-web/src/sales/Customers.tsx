@@ -9,7 +9,6 @@ import {
   Order,
   Page,
   Person,
-  Product,
   Region,
   has,
   date,
@@ -20,6 +19,7 @@ import {
 } from './types';
 import { useResource, State, Modal, Form, Pager, SearchBox } from './shared';
 import { CreateOrder, OrderDetail } from './Orders';
+import { CatalogProductSearch } from './CatalogProductSearch';
 function CustomerForm({
   customer,
   done,
@@ -30,7 +30,6 @@ function CustomerForm({
   close: () => void;
 }) {
   const regions = useResource<Region[]>('/sales/regions');
-  const products = useResource<Page<Product>>('/catalog/products');
   const [selectedProducts, setSelectedProducts] = useState<string[]>(
     customer?.expectedProducts || [],
   );
@@ -119,46 +118,27 @@ function CustomerForm({
               </select>
             </label>
           </div>
-          {/* Expected Products multi-select */}
-          <label>
-            Sản phẩm dự kiến mua
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 6,
-                padding: '8px 0',
-                minHeight: 40,
-              }}
-            >
-              {products.data?.items.filter((p) => p.isActive).map((p) => {
-                const isSelected = selectedProducts.includes(p.name);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`badge ${isSelected ? '' : 'gray'}`}
-                    style={{
-                      cursor: 'pointer',
-                      border: isSelected ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-                      background: isSelected ? '#dbeafe' : '#f8fafc',
-                      color: isSelected ? '#1e40af' : '#64748b',
-                      fontWeight: isSelected ? 600 : 400,
-                      padding: '4px 10px',
-                      borderRadius: 16,
-                    }}
-                    onClick={() => toggleProduct(p.name)}
-                  >
-                    {isSelected ? '✓ ' : ''}{p.name}
-                  </button>
-                );
-              })}
-              {products.data && !products.data.items.some((p) => p.isActive) && (
-                <span className="muted">Không có sản phẩm</span>
-              )}
-            </div>
-          </label>
-          <State loading={products.loading} error={products.error} />
+          <h3>Sản phẩm dự kiến mua</h3>
+          <div className="selected-product-chips" aria-label="Sản phẩm đã chọn">
+            {selectedProducts.map((name) => (
+              <button
+                type="button"
+                key={name}
+                onClick={() => toggleProduct(name)}
+                aria-label={'Bỏ chọn ' + name}
+              >
+                {name} ×
+              </button>
+            ))}
+          </div>
+          <CatalogProductSearch
+            selectedNames={selectedProducts}
+            onSelect={(product) =>
+              setSelectedProducts((names) =>
+                names.includes(product.name) ? names : [...names, product.name],
+              )
+            }
+          />
           {!customer && (
             <p className="muted">
               Khách mới được giao cho bạn chăm sóc. Sale tổng hoặc Admin có thể bàn giao sau.

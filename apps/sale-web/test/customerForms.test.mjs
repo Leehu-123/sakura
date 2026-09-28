@@ -99,7 +99,8 @@ for (const [name, Form] of [
     });
     const html = render(Form);
     assert.match(html, /Lụa/);
-    assert.doesNotMatch(html, /Ngừng bán/);
+    assert.match(html, /disabled=""[^>]*><span>Ngừng bán/);
+    assert.match(html, /Tìm sản phẩm trong danh mục/);
     assert.match(html, /form/);
   });
   test(name + ' remains usable while catalog loads, is empty or fails', () => {

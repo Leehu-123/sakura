@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useResource, State, Pager, SearchBox, Modal, Form } from './shared';
-import { Actor, Page, Product, money, customerStatuses, has } from './types';
+import { Actor, Page, money, customerStatuses, has } from './types';
+import { CatalogProductSearch } from './CatalogProductSearch';
 import { api } from '../api';
 import { LayoutList, Kanban, GripVertical, Pencil, Package, TrendingUp } from 'lucide-react';
 
@@ -52,11 +53,6 @@ function ForecastEditor({
   close: () => void;
   done: () => void;
 }) {
-  const products = useResource<Page<Product>>(
-    '/catalog/products',
-    0,
-    has(actor, 'catalog.products.read'),
-  );
   const [items, setItems] = useState<Item[]>(
     c.expectedItems.length
       ? c.expectedItems
@@ -125,25 +121,40 @@ function ForecastEditor({
           Nhập số lượng nếu chốt thành công. Dự báo xuất sẽ nhân với cùng tỷ lệ chốt; đây chưa phải
           lệnh xuất kho.
         </p>
-        <State loading={products.loading} error={products.error} />
-        <datalist id="pipeline-product-options">
-          {products.data?.items
-            .filter((p) => p.isActive)
-            .map((p) => (
-              <option key={p.id} value={p.name} />
-            ))}
-        </datalist>
+        {has(actor, 'catalog.products.read') && (
+          <CatalogProductSearch
+            selectedNames={items.map((row) => row.name)}
+            disabled={items.length >= 100}
+            onSelect={(product) => {
+              const units = [
+                ...new Set(
+                  product.variants
+                    .filter((v) => v.isActive)
+                    .map((v) => v.unit.trim())
+                    .filter(Boolean),
+                ),
+              ];
+              setItems((rows) =>
+                rows.some((row) => row.name === product.name)
+                  ? rows
+                  : [
+                      ...rows,
+                      { name: product.name, unit: units.length === 1 ? units[0] : '', quantity: 1 },
+                    ],
+              );
+            }}
+          />
+        )}
         {items.map((row, i) => (
           <div className="forecast-item-row" key={i}>
             <label>
-              Loại hàng
+              Sản phẩm đã chọn
               <input
                 required
                 maxLength={150}
-                list="pipeline-product-options"
-                aria-label={'Loại hàng ' + (i + 1)}
+                readOnly
+                aria-label={'Sản phẩm ' + (i + 1)}
                 value={row.name}
-                onChange={(e) => change(i, 'name', e.target.value)}
               />
             </label>
             <label>
@@ -179,13 +190,10 @@ function ForecastEditor({
             </button>
           </div>
         ))}
-        <button
-          type="button"
-          disabled={items.length >= 100}
-          onClick={() => setItems((rows) => [...rows, { name: '', unit: '', quantity: 1 }])}
-        >
-          + Thêm loại hàng
-        </button>
+        <p className="muted">
+          Chọn sản phẩm từ danh mục phía trên để thêm vào dự báo. Các tên đã lưu trước đây được giữ
+          nguyên; có thể xóa dòng và chọn lại sản phẩm.
+        </p>
       </Form>
     </Modal>
   );
