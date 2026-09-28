@@ -126,21 +126,10 @@ function ForecastEditor({
             selectedNames={items.map((row) => row.name)}
             disabled={items.length >= 100}
             onSelect={(product) => {
-              const units = [
-                ...new Set(
-                  product.variants
-                    .filter((v) => v.isActive)
-                    .map((v) => v.unit.trim())
-                    .filter(Boolean),
-                ),
-              ];
               setItems((rows) =>
                 rows.some((row) => row.name === product.name)
                   ? rows
-                  : [
-                      ...rows,
-                      { name: product.name, unit: units.length === 1 ? units[0] : '', quantity: 1 },
-                    ],
+                  : [...rows, { name: product.name, unit: product.unit, quantity: 1 }],
               );
             }}
           />
@@ -151,7 +140,7 @@ function ForecastEditor({
               Sản phẩm đã chọn
               <input
                 required
-                maxLength={150}
+                maxLength={320}
                 readOnly
                 aria-label={'Sản phẩm ' + (i + 1)}
                 value={row.name}
@@ -191,7 +180,7 @@ function ForecastEditor({
           </div>
         ))}
         <p className="muted">
-          Chọn sản phẩm từ danh mục phía trên để thêm vào dự báo. Các tên đã lưu trước đây được giữ
+          Tìm nhóm hàng rồi chọn từng mẫu để thêm vào dự báo. Các tên đã lưu trước đây được giữ
           nguyên; có thể xóa dòng và chọn lại sản phẩm.
         </p>
       </Form>

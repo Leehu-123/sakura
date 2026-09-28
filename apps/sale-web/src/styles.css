@@ -2848,11 +2848,20 @@ dialog::backdrop {
 .forecast-breakdown summary { cursor: pointer; font-weight: 600; }
 .forecast-notice { padding: 10px 14px; background: #fff8e6; color: #755317; border-radius: 8px; font-size: 13px; }
 .forecast-item-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
-.catalog-product-search { margin: 12px 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-.catalog-product-results { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; margin-top: 8px; }
-.catalog-product-results button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 8px 10px; }
-.catalog-product-results button span { font-weight: 600; overflow-wrap: anywhere; }
-.catalog-product-results button small { color: #64748b; overflow-wrap: anywhere; }
+.catalog-product-search { margin: 12px 0; }
+.catalog-search-popup { margin-top: 6px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; box-shadow: 0 6px 18px #0f172a12; }
+.catalog-product-results { display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
+.catalog-product-results button { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; padding: 8px; background: white; border: 1px solid transparent; border-radius: 8px; }
+.catalog-product-results button:not(:disabled):hover { background: #fff4f7; border-color: #f3d6df; }
+.catalog-choice-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+.catalog-choice-text small { color: #64748b; }
+.catalog-choice-photo { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 6px; background: #f1f5f9; overflow: hidden; color: #94a3b8; }
+.catalog-choice-photo .stored-image { width: 100%; height: 100%; }
+.catalog-choice-photo img.product-photo { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
+.catalog-choice-photo .muted { font-size: 9px; }
+.catalog-variant-options { margin: 2px 0 6px 18px; border-left: 2px solid #f3d6df; padding-left: 6px; }
+.catalog-group-toggle > svg { flex-shrink: 0; }
+.catalog-group-toggle > svg.expanded { transform: rotate(180deg); }
 .selected-product-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .selected-product-chips button { border-radius: 18px; background: #fce7f0; color: #9d174d; padding: 5px 10px; }
 .forecast-item-row label { min-width: 0; }

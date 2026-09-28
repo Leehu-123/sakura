@@ -83,7 +83,7 @@ for (const [name, Form] of [
   ['customer edit', CustomerForm],
   ['pipeline forecast', ForecastEditor],
 ]) {
-  test(name + ' renders an API product page without a blank screen', () => {
+  test(name + ' opens without a blank screen or unsolicited catalog list', () => {
     setCatalog({
       data: {
         items: [
@@ -99,7 +99,7 @@ for (const [name, Form] of [
     });
     const html = render(Form);
     assert.match(html, /Lụa/);
-    assert.match(html, /disabled=""[^>]*><span>Ngừng bán/);
+    assert.doesNotMatch(html, /catalog-search-popup/);
     assert.match(html, /Tìm sản phẩm trong danh mục/);
     assert.match(html, /form/);
   });
@@ -112,7 +112,7 @@ for (const [name, Form] of [
       setCatalog(state);
       const html = render(Form);
       assert.match(html, /form/);
-      if (state.error) assert.match(html, /Không tải được danh mục/);
+      assert.doesNotMatch(html, /catalog-search-popup/);
     }
   });
 }

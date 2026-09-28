@@ -26,7 +26,7 @@ export class ForecastItemDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(1)
-  @MaxLength(150)
+  @MaxLength(320)
   name!: string;
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()

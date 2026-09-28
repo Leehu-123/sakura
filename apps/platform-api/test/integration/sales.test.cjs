@@ -588,6 +588,41 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
   );
 });
 
+test('Catalog drilldown: category and variant search; save exact SKU labels without truncation', async () => {
+  const user = await db.user.create({ data: {
+    email: 'catalog-drilldown@test.local', displayName: 'Catalog tester', passwordHash: admin.passwordHash,
+    mustChangePassword: false, roleAssignments: { create: { roleId: regionalRole.id } },
+  } });
+  const jwt = await mint(user.id);
+  const get = path => http().get('/api/v1' + path).set('Authorization', 'Bearer ' + jwt);
+  const product = await db.product.create({ data: {
+    name: 'Nhóm hàng '.padEnd(150, 'A'), category: 'Danh mục kiểm thử chọn mẫu',
+    variants: { create: [
+      { sku: 'CATALOG-BLUE-'.padEnd(50, 'X'), name: 'Mẫu xanh ngọc '.padEnd(100, 'B'), unit: 'mét', price: '15000' },
+      { sku: 'CATALOG-RED', name: 'Mẫu đỏ', unit: 'cuộn', price: '25000' },
+    ] },
+  }, include: { variants: true } });
+  for (const search of ['danh mục kiểm thử chọn mẫu', 'xanh ngọc', 'catalog-red']) {
+    const page = (await get('/catalog/products?search=' + encodeURIComponent(search)).expect(200)).body;
+    assert.equal(page.total, 1);
+    assert.equal(page.items[0].id, product.id);
+    assert.equal(page.items[0].variants.length, 2);
+  }
+  const customer = await db.customer.create({ data: {
+    name: 'Drilldown customer', status: 'CONSULTING', createdById: admin.id,
+    assignments: { create: { userId: user.id, assignedById: admin.id, reason: 'Drilldown test' } },
+  } });
+  const items = product.variants.map(v => ({ name: '[' + v.sku + '] ' + product.name + ' · ' + v.name, unit: v.unit, quantity: 2 }));
+  assert.ok(items.some(i => i.name.length > 150));
+  const path = '/api/v1/sales/customers/' + customer.id + '/pipeline';
+  const saved = (await http().patch(path).set('Authorization', 'Bearer ' + jwt).send({ version: customer.version, expectedItems: items }).expect(200)).body;
+  assert.deepEqual((await get('/sales/customers/' + customer.id).expect(200)).body.expectedItems, items);
+  assert.deepEqual((await db.customer.findUniqueOrThrow({ where: { id: customer.id } })).expectedItems, items);
+  await http().patch(path).set('Authorization', 'Bearer ' + jwt).send({
+    version: saved.version, expectedItems: [{ name: 'X'.repeat(321), unit: 'mét', quantity: 1 }],
+  }).expect(400);
+});
+
 test('Pipeline: totals include hidden cards; moves are scoped, versioned and preserve customer details', async () => {
   const user = await db.user.create({data:{email:'pipeline-owner@test.local',displayName:'Pipeline owner',passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId:regionalRole.id}}}});
   const jwt = await mint(user.id);

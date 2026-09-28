@@ -26,7 +26,9 @@ export class ProductService {
       ? {
           OR: [
             { name: { contains: query.search, mode: 'insensitive' } },
+            { category: { contains: query.search, mode: 'insensitive' } },
             { variants: { some: { sku: { contains: query.search, mode: 'insensitive' } } } },
+            { variants: { some: { name: { contains: query.search, mode: 'insensitive' } } } },
           ],
         }
       : {};
