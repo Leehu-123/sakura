@@ -2,6 +2,14 @@ import { useState } from 'react';
 import { BarChart3, Download, RefreshCw, ArrowRight } from 'lucide-react';
 import { useResource, State } from './shared';
 type Metrics = {
+  shippingCharged: string;
+  shippingEstimated: string;
+  shippingActual: string;
+  shippingDifference: string;
+  shippingUnknown: number;
+  shippingChargedUnknown: number;
+  shippingEstimatedOrders: number;
+  shippingComparedOrders: number;
   orders: number;
   validOrders: number;
   cancelled: number;
@@ -15,6 +23,7 @@ type Metrics = {
 };
 type Row = Metrics & { label: string; source?: string };
 type Report = {
+  carriers: Row[];
   from: string;
   to: string;
   source: string;
@@ -49,6 +58,25 @@ function exportReport(d: Report) {
     [],
     ['Nguồn', 'Trạng thái', 'Số đơn', 'Giá trị đơn (VND)'],
     ...d.statuses.map((r) => [r.source, r.label, r.orders, r.value]),
+    [],
+    [
+      'Vận chuyển',
+      'Phí thu khách (VND)',
+      'Cước tạm tính (VND)',
+      'Phí thực trả (VND)',
+      'Đơn chưa đối soát',
+      'Chênh lệch trên đơn đủ dữ liệu (VND)',
+      'Số đơn đủ dữ liệu',
+    ],
+    ...[{ ...d.summary, label: 'Tổng' }, ...d.carriers].map((r) => [
+      r.label,
+      r.shippingCharged,
+      r.shippingEstimated,
+      r.shippingActual,
+      r.shippingUnknown,
+      r.shippingDifference,
+      r.shippingComparedOrders,
+    ]),
   ];
   const csv = rows
     .map((row) =>
@@ -217,6 +245,76 @@ export function SalesReport({
                 'Số đã thu/còn phải thu chưa bao gồm đơn thiếu dữ liệu thanh toán.'}
             </p>
           )}
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Chi phí vận chuyển</h2>
+            </div>
+            <div className="business-kpis">
+              <article className="business-kpi">
+                <span>Phí thu khách</span>
+                <strong>{money(d.summary.shippingCharged)}</strong>
+                <small>Trong tổng đơn hợp lệ</small>
+              </article>
+              <article className="business-kpi">
+                <span>Cước VNPost tạm tính</span>
+                <strong>{money(d.summary.shippingEstimated)}</strong>
+                <small>{d.summary.shippingEstimatedOrders} đơn có cước API</small>
+              </article>
+              <article className="business-kpi">
+                <span>Phí thực trả đã đối soát</span>
+                <strong>{money(d.summary.shippingActual)}</strong>
+                <small>Gồm phí của đơn hủy/hoàn đã ghi nhận</small>
+              </article>
+              <article className="business-kpi">
+                <span>Chênh lệch thu − chi</span>
+                <strong>{money(d.summary.shippingDifference)}</strong>
+                <small>Chỉ trên {d.summary.shippingComparedOrders} đơn đủ dữ liệu</small>
+              </article>
+            </div>
+            <p className="note">
+              {d.summary.shippingUnknown} đơn chưa có phí thực trả;{' '}
+              {d.summary.shippingChargedUnknown} đơn hợp lệ thiếu phí thu khách. Tổng hiện tại chỉ
+              cộng khoản đã biết; chưa thể xem là tổng chi phí đầy đủ khi còn đơn chưa đối soát.
+            </p>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Đối tác</th>
+                    <th>Phí thu khách</th>
+                    <th>Cước tạm tính</th>
+                    <th>Phí thực trả</th>
+                    <th>Chưa đối soát</th>
+                    <th>Chênh lệch đã biết</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.carriers.map((r) => (
+                    <tr key={r.label}>
+                      <td>{r.label}</td>
+                      <td>{money(r.shippingCharged)}</td>
+                      <td>{money(r.shippingEstimated)}</td>
+                      <td>{money(r.shippingActual)}</td>
+                      <td>{r.shippingUnknown}</td>
+                      <td>
+                        {money(r.shippingDifference)}
+                        <small className="block muted">
+                          {r.shippingComparedOrders} đơn đủ dữ liệu
+                        </small>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted">
+              Tính theo ngày tạo/đặt đơn đã chọn, không phải ngày thanh toán cho hãng. Cước API là
+              tạm tính có VAT; phí thực trả do người có quyền ghi nhận theo đối soát. Chênh lệch
+              loại đơn nháp và chưa rõ trạng thái; đơn hủy tính phí thu khách bằng 0 nhưng vẫn trừ
+              phí thực trả. Đơn hoàn vẫn cần đối soát/điều chỉnh trạng thái bán hàng riêng. Đây
+              không phải báo cáo lợi nhuận.
+            </p>
+          </section>
           <section className="panel report-chart">
             <div className="panel-head">
               <h2>Doanh số theo {d.bucket === 'month' ? 'tháng' : 'ngày'}</h2>

@@ -35,6 +35,7 @@ import { MyPipeline } from './sales/MyPipeline';
 import { MyTasks } from './sales/MyTasks';
 import { CalendarCheck, Kanban, ListTodo } from 'lucide-react';
 import { TelegramSettings } from './TelegramSettings';
+import { ShippingSettings } from './shipping/ShippingSettings';
 type Grant = { permission: string; scope: string };
 type Me = {
   id: string;
@@ -85,6 +86,7 @@ type Audit = {
 type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
 type Tab =
   | 'settings'
+  | 'shipping'
   | 'reports'
   | 'storage'
   | 'overview'
@@ -115,6 +117,7 @@ const scopes: Record<string, string> = {
 };
 const titles: Record<Tab, string> = {
   settings: 'Cài đặt',
+  shipping: 'Vận chuyển',
   reports: 'Báo cáo',
   storage: 'Lưu trữ & sao lưu',
   customers: 'Khách hàng',
@@ -135,6 +138,9 @@ const titles: Record<Tab, string> = {
   telegram: 'Telegram',
 };
 const actions: Record<string, string> = {
+  'shipping.connected': 'Kết nối VNPost',
+  'shipping.enabled': 'Bật/tắt đồng bộ VNPost',
+  'order.shipping_cost': 'Ghi phí vận chuyển thực trả',
   'order.shipping_updated': 'Cập nhật vận chuyển',
   'chat.history_imported': 'Tải lịch sử Facebook',
   'chat.support_assigned': 'Phân người hỗ trợ',
@@ -662,10 +668,11 @@ function Workspace({
       ['imports', 'core.imports.manage'],
       ['audit', 'core.audit.read'],
       ['telegram', 'core.users.manage'],
+      ['shipping', 'core.shipping.manage'],
     ] as const
   ).filter(([, p]) => can(p));
   const accountSection = ['users', 'roles', 'catalogs'].includes(tab);
-  const settingSection = ['storage', 'imports', 'audit', 'telegram'].includes(tab);
+  const settingSection = ['storage', 'imports', 'audit', 'telegram', 'shipping'].includes(tab);
   const nav: {
     id: Tab;
     icon: typeof Users;
@@ -853,6 +860,7 @@ function Workspace({
               {tab === 'products' && <Products actor={me} />}
               {tab === 'storage' && <Storage />}
               {tab === 'telegram' && <TelegramSettings />}
+              {tab === 'shipping' && <ShippingSettings />}
               {tab === 'orders' && <Orders actor={me} />}
               {tab === 'imports' && <Imports />}
               {tab === 'historical' && <HistoricalOrders />}

@@ -43,11 +43,13 @@ export class SalesReports {
         : Prisma.sql`FALSE`;
     const base = Prisma.sql`WITH feed AS (
       SELECT o.id,'SAKURA'::text source,o."customerId",o."createdAt" at,o.total,o."paidAmount" paid,o.status::text status,
+      o."shippingFee" "shippingCharged",o."shippingCost" "shippingActual",o."carrierEstimatedFee" "shippingEstimated",COALESCE(NULLIF(o."carrierName",''),'Chưa có đối tác') carrier,
       CASE WHEN o.status IN ('CONFIRMED','COMPLETED') THEN 'VALID' WHEN o.status='CANCELLED' THEN 'CANCELLED' ELSE 'DRAFT' END category,
       COALESCE(u."displayName",'Chưa ghi nhận') closer,COALESCE(o."closedByUserId"::text,'unknown') "closerKey"
       FROM "Order" o LEFT JOIN "User" u ON u.id=o."closedByUserId" WHERE o."createdAt">=(${r.previousStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND o."createdAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
       UNION ALL
       SELECT h.id,'SAPO',h."customerId",h."orderedAt",h.total,h."paidAmount",h."sourceStatus",
+      h."shippingFee",NULL::numeric,NULL::numeric,'Sapo (chưa có dữ liệu đối tác)',
       CASE WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đã hoàn thành','hoàn thành','đang giao dịch','đã xác nhận','completed','confirmed') THEN 'VALID'
       WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đã hủy','đã huỷ','hủy','huỷ','cancelled','canceled') THEN 'CANCELLED'
       WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đặt hàng','nháp','draft') THEN 'DRAFT' ELSE 'UNKNOWN' END,
@@ -61,7 +63,15 @@ export class SalesReports {
       COALESCE(SUM(paid) FILTER(WHERE category='VALID'),0)::text paid,
       COALESCE(SUM(GREATEST(total-paid,0)) FILTER(WHERE category='VALID' AND paid IS NOT NULL),0)::text unpaid,
       COUNT(*) FILTER(WHERE category='VALID' AND paid IS NULL)::int "unknownPayments",
-      COUNT(DISTINCT "customerId") FILTER(WHERE category='VALID')::int customers`;
+      COUNT(DISTINCT "customerId") FILTER(WHERE category='VALID')::int customers,
+      COALESCE(SUM("shippingCharged") FILTER(WHERE category='VALID'),0)::text "shippingCharged",
+      COALESCE(SUM("shippingEstimated") FILTER(WHERE category<>'DRAFT'),0)::text "shippingEstimated",
+      COALESCE(SUM("shippingActual") FILTER(WHERE category<>'DRAFT'),0)::text "shippingActual",
+      COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingActual" IS NULL)::int "shippingUnknown",
+      COUNT(*) FILTER(WHERE category='VALID' AND "shippingCharged" IS NULL)::int "shippingChargedUnknown",
+      COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingEstimated" IS NOT NULL)::int "shippingEstimatedOrders",
+      COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingActual" IS NOT NULL AND (category='CANCELLED' OR (category='VALID' AND "shippingCharged" IS NOT NULL)))::int "shippingComparedOrders",
+      COALESCE(SUM((CASE WHEN category='VALID' THEN "shippingCharged" ELSE 0 END)-"shippingActual") FILTER(WHERE "shippingActual" IS NOT NULL AND (category='CANCELLED' OR (category='VALID' AND "shippingCharged" IS NOT NULL))),0)::text "shippingDifference"`;
     return this.db.$transaction(
       async (tx) => {
         const summary = await tx.$queryRaw<any[]>(
@@ -83,6 +93,9 @@ export class SalesReports {
         const statuses = await tx.$queryRaw(
           Prisma.sql`${base} SELECT source,status label,category,COUNT(*)::int orders,SUM(total)::text value FROM current GROUP BY source,status,category ORDER BY source,orders DESC`,
         );
+        const carriers = await tx.$queryRaw(
+          Prisma.sql`${base} SELECT carrier label,${metrics} FROM current GROUP BY carrier ORDER BY carrier`,
+        );
         return {
           from: r.from,
           to: r.to,
@@ -94,6 +107,7 @@ export class SalesReports {
           sources,
           staff,
           statuses,
+          carriers,
           scope: hasPermission(actor.grants, 'sales.reports.read', 'GLOBAL')
             ? 'GLOBAL'
             : 'ASSIGNED',

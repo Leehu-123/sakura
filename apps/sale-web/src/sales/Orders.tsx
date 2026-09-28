@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../api';
+import { ShipmentTracking } from '../shipping/ShipmentTracking';
 import { HistoricalOrderDetail } from '../imports/HistoricalOrders';
 import {
   Actor,
@@ -288,6 +289,11 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
               </p>
             </div>
             {order.note && <p className="product-description">{order.note}</p>}
+            <ShipmentTracking
+              order={order}
+              actor={actor}
+              changed={() => setRevision((v) => v + 1)}
+            />
             {has(actor, 'sales.orders.manage') && (
               <div className="sales-actions">
                 {order.status === 'DRAFT' && (
@@ -400,6 +406,12 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
   );
 }
 type FeedOrder = {
+  shippingStatus: string;
+  carrierStatusLabel: string;
+  carrierName: string;
+  trackingCode: string;
+  shippingCost: string | null;
+  shippingSyncError: string;
   id: string;
   source: 'SAKURA' | 'SAPO';
   number: string;
@@ -442,7 +454,7 @@ export function Orders({ actor }: { actor: Actor }) {
     <>
       <div className="sales-toolbar">
         <SearchBox
-          placeholder="Tìm mã đơn Sakura, Sapo hoặc tên khách…"
+          placeholder="Tìm mã đơn, mã vận đơn hoặc tên khách…"
           onSearch={(s) => {
             setSearch(s);
             setPage(1);
@@ -527,6 +539,7 @@ export function Orders({ actor }: { actor: Actor }) {
                   <th>Người chốt</th>
                   <th>Trạng thái</th>
                   <th>Đã thu / Tổng đơn</th>
+                  <th>Vận chuyển</th>
                 </tr>
               </thead>
               <tbody>
@@ -566,6 +579,21 @@ export function Orders({ actor }: { actor: Actor }) {
                     <td>
                       {o.paidAmount == null ? 'Chưa rõ' : money(o.paidAmount)} /{' '}
                       <strong>{money(o.total)}</strong>
+                    </td>
+                    <td>
+                      {o.source === 'SAPO'
+                        ? o.shippingStatus || 'Chưa có dữ liệu'
+                        : o.carrierStatusLabel || shippingStatuses[o.shippingStatus]}
+                      <small className="block muted">
+                        {[o.carrierName, o.trackingCode].filter(Boolean).join(' · ')}
+                      </small>
+                      {o.source === 'SAKURA' && (
+                        <small className="block muted">
+                          Thực trả:{' '}
+                          {o.shippingCost == null ? 'Chưa đối soát' : money(o.shippingCost)}
+                        </small>
+                      )}
+                      {o.shippingSyncError && <small className="block">Cần kiểm tra đồng bộ</small>}
                     </td>
                   </tr>
                 ))}

@@ -24,6 +24,7 @@ import {
 import { normalizePhone, orderTotals, checkTransition } from './domain';
 import { checkVersion } from '../common/version';
 import { chatScope } from '../messenger/domain';
+import { isVnpost } from '../shipping/vnpost';
 const person = { id: true, displayName: true };
 const customerInclude = {
   region: true,
@@ -599,16 +600,41 @@ export class SalesService {
       if (!['CONFIRMED', 'COMPLETED'].includes(old.status))
         throw new BadRequestException('Chỉ cập nhật vận chuyển cho đơn đã chốt hoặc hoàn tất.');
       const data = {
-        carrierName: dto.carrierName.trim(),
+        carrierName: isVnpost(dto.carrierName) ? 'VNPost' : dto.carrierName.trim(),
         trackingCode: dto.trackingCode.trim(),
         shippingStatus: dto.shippingStatus,
       };
       if (data.shippingStatus !== 'NOT_CREATED' && (!data.carrierName || !data.trackingCode))
         throw new BadRequestException('Bổ sung đối tác và mã vận đơn.');
+      if (
+        data.carrierName === 'VNPost' &&
+        data.trackingCode &&
+        !/^[A-Za-z0-9_-]{5,50}$/.test(data.trackingCode)
+      )
+        throw new BadRequestException(
+          'Mã vận đơn VNPost cần 5–50 ký tự chữ, số, gạch ngang hoặc gạch dưới.',
+        );
+      const changedTracking =
+        data.carrierName !== old.carrierName || data.trackingCode !== old.trackingCode;
+      if (changedTracking && old.shippingCost !== null)
+        throw new BadRequestException(
+          'Đơn đã có phí thực trả. Đối soát lại và xóa phí đã ghi trước khi đổi vận đơn để tránh gán nhầm chi phí.',
+        );
       const updated = await tx.order.update({
         where: { id },
         data: {
           ...data,
+          ...(changedTracking
+            ? {
+                carrierEstimatedFee: null,
+                carrierStatusCode: '',
+                carrierStatusLabel: '',
+                carrierUpdatedAt: null,
+                shippingSyncedAt: null,
+                shippingSyncError: '',
+                shippingNextSyncAt: null,
+              }
+            : {}),
           version: { increment: 1 },
           history: {
             create: {

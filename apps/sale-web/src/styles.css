@@ -2286,6 +2286,29 @@ dialog::backdrop {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
+.shipping-settings {
+  padding: 24px;
+  max-width: 900px;
+}
+.shipping-settings form {
+  max-width: 560px;
+  margin: 20px 0;
+}
+.shipping-settings li {
+  margin: 8px 0;
+}
+.shipment-tracking {
+  border-top: 1px solid #e5e9f0;
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.shipment-tracking .sales-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shipment-tracking .contact-order-facts {
+  margin: 12px 0;
+}
 .business-kpi {
   padding: 22px;
   display: grid;
@@ -2494,10 +2517,18 @@ dialog::backdrop {
   flex-shrink: 0;
   margin-top: 6px;
 }
-.priority-dot.--urgent { background: #e11d48; }
-.priority-dot.--high { background: #f59e0b; }
-.priority-dot.--normal { background: #3b82f6; }
-.priority-dot.--low { background: #9ca3af; }
+.priority-dot.--urgent {
+  background: #e11d48;
+}
+.priority-dot.--high {
+  background: #f59e0b;
+}
+.priority-dot.--normal {
+  background: #3b82f6;
+}
+.priority-dot.--low {
+  background: #9ca3af;
+}
 .pipeline-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -2538,8 +2569,15 @@ dialog::backdrop {
   font-weight: 500;
   transition: all 0.15s ease;
 }
-.view-btn:hover { color: var(--ink); background: #e2e8f0; }
-.view-btn.active { background: white; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.view-btn:hover {
+  color: var(--ink);
+  background: #e2e8f0;
+}
+.view-btn.active {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
 
 /* Kanban Board */
 .kanban-board {
@@ -2599,7 +2637,7 @@ dialog::backdrop {
   border-left: 3px solid transparent;
 }
 .kanban-card:hover {
-  box-shadow: 0 3px 10px rgba(0,0,0,0.07);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07);
   transform: translateY(-1px);
 }
 .kanban-card:focus-visible {
@@ -2629,9 +2667,15 @@ dialog::backdrop {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.urgency-dot--overdue { background: #e11d48; }
-.urgency-dot--due-soon { background: #f59e0b; }
-.urgency-dot--ok { background: #10b981; }
+.urgency-dot--overdue {
+  background: #e11d48;
+}
+.urgency-dot--due-soon {
+  background: #f59e0b;
+}
+.urgency-dot--ok {
+  background: #10b981;
+}
 .kanban-card-name {
   font-size: 0.9rem;
   font-weight: 600;
@@ -2841,37 +2885,178 @@ dialog::backdrop {
 }
 
 /* Weighted pipeline forecasts and stage movement */
-.forecast-summary { align-items: stretch; }
-.forecast-summary > div { flex: 1; min-width: 230px; }
-.forecast-summary strong { overflow-wrap: anywhere; }
-.forecast-breakdown { padding: 14px 18px; margin: 12px 0 20px; }
-.forecast-breakdown summary { cursor: pointer; font-weight: 600; }
-.forecast-notice { padding: 10px 14px; background: #fff8e6; color: #755317; border-radius: 8px; font-size: 13px; }
-.forecast-item-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
-.catalog-product-search { margin: 12px 0; }
-.catalog-search-popup { margin-top: 6px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; box-shadow: 0 6px 18px #0f172a12; }
-.catalog-product-results { display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
-.catalog-product-results button { display: flex; width: 100%; align-items: center; gap: 10px; text-align: left; padding: 8px; background: white; border: 1px solid transparent; border-radius: 8px; }
-.catalog-product-results button:not(:disabled):hover { background: #fff4f7; border-color: #f3d6df; }
-.catalog-choice-text { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
-.catalog-choice-text small { color: #64748b; }
-.catalog-choice-photo { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 6px; background: #f1f5f9; overflow: hidden; color: #94a3b8; }
-.catalog-choice-photo .stored-image { width: 100%; height: 100%; }
-.catalog-choice-photo img.product-photo { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
-.catalog-choice-photo .muted { font-size: 9px; }
-.catalog-variant-options { margin: 2px 0 6px 18px; border-left: 2px solid #f3d6df; padding-left: 6px; }
-.catalog-group-toggle > svg { flex-shrink: 0; }
-.catalog-group-toggle > svg.expanded { transform: rotate(180deg); }
-.selected-product-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.selected-product-chips button { border-radius: 18px; background: #fce7f0; color: #9d174d; padding: 5px 10px; }
-.forecast-item-row label { min-width: 0; }
-.forecast-item-row input { width: 100%; }
-.pipeline-card-actions { display:flex; gap:8px; align-items:center; margin-top:12px; }
-.pipeline-card-actions select { min-width:0; flex:1; font-size:12px; padding:6px; }
-.pipeline-edit { display:flex; align-items:center; gap:4px; white-space:nowrap; }
-.kanban-card[draggable=true] { cursor:grab; }
-.kanban-card.dragging { opacity:.45; }
-.kanban-column.drop-target { background:#fce7ef; outline:2px dashed #ad2358; outline-offset:-2px; }
-.kanban-card .kanban-card-name { text-align:left; }
-.kanban-card .kanban-card-header > svg { color:#94a3b8; flex-shrink:0; }
-@media(max-width:600px) { .forecast-item-row {grid-template-columns:1fr 1fr;} .forecast-item-row label:first-child {grid-column:1/-1;} .forecast-summary {flex-wrap:wrap;} }
+.forecast-summary {
+  align-items: stretch;
+}
+.forecast-summary > div {
+  flex: 1;
+  min-width: 230px;
+}
+.forecast-summary strong {
+  overflow-wrap: anywhere;
+}
+.forecast-breakdown {
+  padding: 14px 18px;
+  margin: 12px 0 20px;
+}
+.forecast-breakdown summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.forecast-notice {
+  padding: 10px 14px;
+  background: #fff8e6;
+  color: #755317;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.forecast-item-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.catalog-product-search {
+  margin: 12px 0;
+}
+.catalog-search-popup {
+  margin-top: 6px;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 6px 18px #0f172a12;
+}
+.catalog-product-results {
+  display: grid;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.catalog-product-results button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 8px;
+  background: white;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.catalog-product-results button:not(:disabled):hover {
+  background: #fff4f7;
+  border-color: #f3d6df;
+}
+.catalog-choice-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.catalog-choice-text small {
+  color: #64748b;
+}
+.catalog-choice-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  overflow: hidden;
+  color: #94a3b8;
+}
+.catalog-choice-photo .stored-image {
+  width: 100%;
+  height: 100%;
+}
+.catalog-choice-photo img.product-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+.catalog-choice-photo .muted {
+  font-size: 9px;
+}
+.catalog-variant-options {
+  margin: 2px 0 6px 18px;
+  border-left: 2px solid #f3d6df;
+  padding-left: 6px;
+}
+.catalog-group-toggle > svg {
+  flex-shrink: 0;
+}
+.catalog-group-toggle > svg.expanded {
+  transform: rotate(180deg);
+}
+.selected-product-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.selected-product-chips button {
+  border-radius: 18px;
+  background: #fce7f0;
+  color: #9d174d;
+  padding: 5px 10px;
+}
+.forecast-item-row label {
+  min-width: 0;
+}
+.forecast-item-row input {
+  width: 100%;
+}
+.pipeline-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.pipeline-card-actions select {
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  padding: 6px;
+}
+.pipeline-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.kanban-card[draggable='true'] {
+  cursor: grab;
+}
+.kanban-card.dragging {
+  opacity: 0.45;
+}
+.kanban-column.drop-target {
+  background: #fce7ef;
+  outline: 2px dashed #ad2358;
+  outline-offset: -2px;
+}
+.kanban-card .kanban-card-name {
+  text-align: left;
+}
+.kanban-card .kanban-card-header > svg {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .forecast-item-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .forecast-item-row label:first-child {
+    grid-column: 1/-1;
+  }
+  .forecast-summary {
+    flex-wrap: wrap;
+  }
+}

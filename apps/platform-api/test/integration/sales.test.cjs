@@ -588,6 +588,97 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
   );
 });
 
+test('VNPost: secure connection, scoped tracking, concurrency and shipping reports', async (t) => {
+  const {VnpostGateway}=require('../../dist/shipping/vnpost');
+  const {ShippingService}=require('../../dist/shipping/shipping');
+  const {BadGatewayException}=require('@nestjs/common');
+  process.env.MESSENGER_CONFIG_KEY='ab'.repeat(32);
+  const gateway=app.get(VnpostGateway),service=app.get(ShippingService);
+  const originalLogin=gateway.login, originalTrack=gateway.track;
+  let calls=0, snapshot={statusCode:'12',statusLabel:'Đang giao hàng',shippingStatus:'IN_TRANSIT',fee:'25000',updatedAt:new Date('2026-09-28T03:00:00Z')};
+  gateway.login=async()=> 'test-vnpost-token-not-real';
+  gateway.track=async()=>{calls++;return snapshot;};
+  const makeUser=(email,roleId)=>db.user.create({data:{email,displayName:email,passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId}}}});
+  const owner=await makeUser('vnpost-owner@test.local',regionalRole.id),manager=await makeUser('vnpost-admin@test.local',adminRole.id),other=await makeUser('vnpost-other@test.local',regionalRole.id);
+  const jwt=await mint(owner.id),mj=await mint(manager.id),oj=await mint(other.id);
+  const req=(method,path,body,j=jwt)=>{const r=http()[method]('/api/v1'+path).set('Authorization','Bearer '+j);return body===undefined?r:r.send(body);};
+  const customer=await db.customer.create({data:{name:'VNPost test',createdById:owner.id,assignments:{create:{userId:owner.id,assignedById:manager.id,reason:'Test scope'}}}});
+  const orderData={customerId:customer.id,createdById:owner.id,requestHash:'fixture',recipientName:'Test',recipientPhone:'',shippingAddress:'Test',subtotal:100000,discount:0,shippingFee:30000,total:130000,paidAmount:0,status:'CONFIRMED',carrierName:'VNPost',trackingCode:'TEST123VN',shippingStatus:'WAITING_PICKUP',createdAt:new Date('2026-08-20T01:00:00Z')};
+  orderData.closedByUserId=owner.id;orderData.closedAt=new Date('2026-08-20T01:00:00Z');
+  let order=await db.order.create({data:{...orderData,requestKey:randomUUID()}});
+  const path='/sales/orders/'+order.id;
+  const reload=async()=>{order=await db.order.findUniqueOrThrow({where:{id:order.id}});};
+  const ready=async()=>{await db.order.update({where:{id:order.id},data:{shippingSyncedAt:null}});await reload();};
+  try{
+    await t.test('Only admin can connect; credentials never returned/stored plaintext',async()=>{
+      await req('get','/shipping/vnpost').expect(403);
+      await req('post','/shipping/vnpost/connect',{version:0,username:'test',password:'test-pass',customerCode:'CMS1'}).expect(403);
+      const result=(await req('post','/shipping/vnpost/connect',{version:0,username:'test',password:'test-pass',customerCode:'CMS1'},mj).expect(201)).body;
+      assert.equal(result.connected,true);assert.equal(result.enabled,true);
+      assert.equal(JSON.stringify(result).includes('token'),false);
+      const stored=await db.shippingConnection.findUniqueOrThrow({where:{id:1}});
+      assert.equal(JSON.stringify(stored).includes('test-vnpost-token-not-real'),false);
+      assert.equal(JSON.stringify(stored).includes('test-pass'),false);
+      await req('post','/shipping/vnpost/connect',{version:0,username:'test',password:'test-pass',customerCode:'CMS1'},mj).expect(409);
+    });
+    await t.test('Scope checked before API; snapshot never changes customer charge or payments',async()=>{
+      await req('post',path+'/shipping-sync',{version:order.version},oj).expect(404);assert.equal(calls,0);
+      await req('post',path+'/shipping-sync',{version:order.version}).expect(201);await reload();
+      assert.equal(order.carrierEstimatedFee.toString(),'25000');assert.equal(order.shippingCost,null);
+      assert.equal(order.shippingFee.toString(),'30000');assert.equal(order.total.toString(),'130000');
+      assert.equal(order.paymentStatus,'UNPAID');assert.equal(order.status,'CONFIRMED');assert.equal(order.shippingStatus,'IN_TRANSIT');
+      await req('get',path+'/shipping-events',undefined,oj).expect(404);
+      assert.equal((await req('get',path+'/shipping-events').expect(200)).body.length,1);
+    });
+    await t.test('Repeated observation is idempotent; stale data and errors preserve known values',async()=>{
+      await ready();const v=order.version;
+      await req('post',path+'/shipping-sync',{version:v}).expect(201);await reload();assert.equal(order.version,v);
+      assert.equal(await db.shippingEvent.count({where:{orderId:order.id}}),1);
+      await ready();snapshot={...snapshot,updatedAt:new Date('2026-09-27T03:00:00Z'),fee:'1'};
+      await req('post',path+'/shipping-sync',{version:order.version}).expect(400);await reload();assert.equal(order.carrierEstimatedFee.toString(),'25000');
+      gateway.track=async()=>{throw new BadGatewayException('VNPost tạm gián đoạn.');};
+      await req('post',path+'/shipping-sync',{version:order.version}).expect(502);await reload();assert.equal(order.carrierEstimatedFee.toString(),'25000');
+      assert.equal(order.shippingSyncError,'VNPost tạm gián đoạn.');
+    });
+    await t.test('Manual expense versioned and audited; poll never overwrites it',async()=>{
+      await req('patch',path+'/shipping-cost',{version:order.version,amount:'24000',note:'Bảng kê thử nghiệm'},oj).expect(404);
+      await req('patch',path+'/shipping-cost',{version:order.version,amount:'-1',note:'Bảng kê'}).expect(400);
+      const v=order.version;await req('patch',path+'/shipping-cost',{version:v,amount:'24000',note:'Bảng kê thử nghiệm'}).expect(200);
+      await req('patch',path+'/shipping-cost',{version:v,amount:'1',note:'Bảng kê'}).expect(409);await reload();
+      snapshot={...snapshot,updatedAt:new Date('2026-09-28T04:00:00Z'),fee:'27000',statusCode:'14',statusLabel:'Đã giao hàng',shippingStatus:'DELIVERED'};
+      gateway.track=async()=>snapshot;
+      await db.order.update({where:{id:order.id},data:{shippingNextSyncAt:null}});await service.poll();await reload();
+      assert.equal(order.shippingCost.toString(),'24000');assert.equal(order.carrierEstimatedFee.toString(),'27000');
+      assert.equal(order.shippingStatus,'DELIVERED');assert.equal(order.status,'CONFIRMED');assert.equal(order.paidAmount.toString(),'0');
+      assert.equal(await db.auditLog.count({where:{entityId:order.id,action:'order.shipping_cost'}}),1);
+      await req('patch',path+'/shipping',{version:order.version,carrierName:'VNPost',trackingCode:'NEW123VN',shippingStatus:'WAITING_PICKUP'}).expect(400);
+    });
+    await t.test('Report counts charged, estimated, actual, cancelled expenses and unknown separately',async()=>{
+      await db.order.create({data:{...orderData,requestKey:randomUUID(),trackingCode:'CANCEL123',status:'CANCELLED',shippingCost:5000,shippingFee:90000,total:190000}});
+      await db.order.create({data:{...orderData,requestKey:randomUUID(),trackingCode:'UNKNOWN123',shippingFee:10000,total:110000}});
+      await db.order.create({data:{...orderData,requestKey:randomUUID(),trackingCode:'DRAFT123',status:'DRAFT',shippingCost:999999}});
+      await db.order.create({data:{...orderData,requestKey:randomUUID(),trackingCode:'FREE123',shippingCost:0,shippingFee:0,total:100000}});
+      const outside=await db.customer.create({data:{name:'Outside shipping scope',createdById:other.id}});
+      await db.order.create({data:{...orderData,customerId:outside.id,requestKey:randomUUID(),shippingCost:999999}});
+      const report=(await req('get','/sales/reports?from=2026-08-20&to=2026-08-20&source=SAKURA').expect(200)).body;
+      assert.equal(report.summary.shippingCharged,'40000');assert.equal(report.summary.shippingActual,'29000');
+      assert.equal(report.summary.shippingEstimated,'27000');assert.equal(report.summary.shippingUnknown,1);
+      assert.equal(report.summary.shippingDifference,'1000');assert.equal(report.summary.shippingComparedOrders,3);
+      assert.equal(report.carriers[0].shippingActual,'29000');assert.equal(report.timeline[0].shippingActual,'29000');
+      const feed=(await req('get','/sales/order-feed?source=SAKURA&search=TEST123VN').expect(200)).body;
+      assert.equal(feed.total,1);assert.equal(feed.items[0].shippingCost,'24000');assert.equal(feed.items[0].carrierStatusLabel,'Đã giao hàng');
+      assert.equal((await req('get','/sales/order-feed?search=TEST123VN',undefined,oj).expect(200)).body.total,0);
+      assert.equal((await req('get','/sales/reports?from=2026-08-20&to=2026-08-20',undefined,oj).expect(200)).body.summary.orders,0);
+    });
+    await t.test('Concurrent edits/reassignment cannot be overwritten by network response',async()=>{
+      await ready();gateway.track=async()=>{await db.order.update({where:{id:order.id},data:{version:{increment:1},note:'Concurrent change'}});return snapshot;};
+      await req('post',path+'/shipping-sync',{version:order.version}).expect(409);await reload();assert.equal(order.note,'Concurrent change');
+      gateway.track=async()=>{await db.customerAssignment.updateMany({where:{customerId:customer.id,endedAt:null},data:{endedAt:new Date()}});return snapshot;};
+      await req('post',path+'/shipping-sync',{version:order.version}).expect(404);
+    });
+  }finally{gateway.login=originalLogin;gateway.track=originalTrack;await db.shippingConnection.updateMany({data:{enabled:false}});}
+});
+
 test('Catalog drilldown: category and variant search; save exact SKU labels without truncation', async () => {
   const user = await db.user.create({ data: {
     email: 'catalog-drilldown@test.local', displayName: 'Catalog tester', passwordHash: admin.passwordHash,

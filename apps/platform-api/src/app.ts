@@ -12,6 +12,7 @@ import { SalesModule } from './sales/sales.controller';
 import { ImportsModule } from './imports/imports.module';
 import { MessengerModule } from './messenger/messenger.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { ShippingModule } from './shipping/shipping';
 @Controller('health')
 @ApiTags('Vận hành')
 class HealthController {
@@ -28,6 +29,7 @@ class HealthController {
     CoreModule,
     SalesModule,
     CatalogModule,
+    ShippingModule,
     ImportsModule,
     MessengerModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),

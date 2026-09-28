@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Printer, MoreHorizontal, Truck } from 'lucide-react';
 import { api } from '../api';
+import { ShipmentTracking } from '../shipping/ShipmentTracking';
 import {
   Actor,
   Order,
@@ -151,7 +152,7 @@ function OrderActions({
         ) : action === 'shipping' ? (
           <>
             <p className="muted">
-              Thông tin ghi nhận thủ công. Chưa tạo hoặc đồng bộ vận đơn với hãng.
+              Với VNPost, lưu mã vận đơn rồi bấm Đồng bộ VNPost để lấy trạng thái và cước.
             </p>
             <label>
               Đối tác vận chuyển
@@ -277,6 +278,7 @@ function NativeCard({
                 <dt>Ghi chú</dt>
                 <dd>{o.note || 'Chưa có'}</dd>
               </dl>
+              <ShipmentTracking order={o} actor={actor} changed={refresh} editShipping={false} />
               <div className="order-card-actions">
                 {has(actor, 'sales.shipments.manage') &&
                   ['CONFIRMED', 'COMPLETED'].includes(o.status) && (

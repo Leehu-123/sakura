@@ -68,6 +68,13 @@ export type Order = {
   shippingStatus: string;
   carrierName: string;
   trackingCode: string;
+  carrierEstimatedFee: string | null;
+  shippingCost: string | null;
+  shippingCostNote: string;
+  carrierStatusLabel: string;
+  carrierUpdatedAt: string | null;
+  shippingSyncedAt: string | null;
+  shippingSyncError: string;
   version: number;
   recipientName: string;
   recipientPhone: string;
@@ -109,7 +116,10 @@ export const money = (n?: string | number | bigint | null) => {
     } else if (typeof n === 'number') {
       intVal = BigInt(Math.round(isNaN(n) ? 0 : n));
     } else {
-      const s = String(n).trim().split('.')[0].replace(/[^\d-]/g, '');
+      const s = String(n)
+        .trim()
+        .split('.')[0]
+        .replace(/[^\d-]/g, '');
       intVal = s ? BigInt(s) : 0n;
     }
     return new Intl.NumberFormat('vi-VN').format(intVal) + ' đ';

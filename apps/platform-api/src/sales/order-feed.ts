@@ -29,11 +29,12 @@ export class OrderFeedService {
       SELECT o.id, 'SAKURA'::text AS source, 'SK-' || LPAD(o.number::text, GREATEST(6, LENGTH(o.number::text)), '0') AS number,
         o."customerId", o."createdAt" AS "orderedAt", o.status::text AS status,
         o.total, o."paidAmount", o."paymentStatus"::text AS "paymentStatus",
+        o."shippingStatus"::text AS "shippingStatus",o."carrierStatusLabel",o."carrierName",o."trackingCode",o."shippingCost",o."shippingSyncError",
         u."displayName" AS "closedBy", ''::text AS "sourceCreatedBy", ''::text AS "sourceCustomerName"
       FROM "Order" o LEFT JOIN "User" u ON u.id = o."closedByUserId"
       UNION ALL
       SELECT h.id, 'SAPO'::text, h.number, h."customerId", h."orderedAt", h."sourceStatus",
-        h.total, h."paidAmount", h."sourcePaymentStatus", NULLIF(h."sourceClosedBy", ''),
+        h.total, h."paidAmount", h."sourcePaymentStatus",h."sourceShippingStatus",'','','',NULL::numeric,'',NULLIF(h."sourceClosedBy", ''),
         h."sourceCreatedBy", h."sourceCustomerName"
       FROM "HistoricalOrder" h
     ), filtered AS (
@@ -45,6 +46,7 @@ export class OrderFeedService {
           OR (${q.link} = 'UNLINKED' AND f."customerId" IS NULL))
         AND (${q.status} = '' OR f.source || ':' || f.status = ${q.status})
         AND (${q.search} = '' OR POSITION(LOWER(${q.search}) IN LOWER(f.number)) > 0
+          OR POSITION(LOWER(${q.search}) IN LOWER(f."trackingCode")) > 0
           OR POSITION(LOWER(${q.search}) IN LOWER(COALESCE(c.name, ''))) > 0
           OR POSITION(LOWER(${q.search}) IN LOWER(f."sourceCustomerName")) > 0)
     )`;

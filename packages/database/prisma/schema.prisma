@@ -350,6 +350,16 @@ model Order {
   shippingAddress String
   carrierName     String @default("")
   trackingCode    String @default("")
+  carrierEstimatedFee Decimal? @db.Decimal(18, 0)
+  shippingCost Decimal? @db.Decimal(18, 0)
+  shippingCostNote String @default("")
+  carrierStatusCode String @default("")
+  carrierStatusLabel String @default("")
+  carrierUpdatedAt DateTime?
+  shippingSyncedAt DateTime?
+  shippingSyncError String @default("")
+  shippingNextSyncAt DateTime?
+  shippingEvents ShippingEvent[]
   note            String         @default("")
   subtotal        Decimal        @db.Decimal(18, 0)
   discount        Decimal        @db.Decimal(18, 0)
@@ -366,6 +376,31 @@ model Order {
 
   @@index([customerId, createdAt])
   @@index([status, createdAt])
+}
+
+model ShippingConnection {
+  id Int @id @default(1)
+  customerCode String
+  tokenEncrypted String
+  environment String @default("PRODUCTION")
+  enabled Boolean @default(false)
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model ShippingEvent {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  trackingCode String
+  statusCode String
+  statusLabel String
+  estimatedFee Decimal? @db.Decimal(18, 0)
+  carrierUpdatedAt DateTime
+  observedAt DateTime @default(now())
+  fingerprint String
+  @@unique([orderId, fingerprint])
+  @@index([orderId, observedAt])
 }
 
 model OrderItem {
