@@ -143,6 +143,8 @@ const titles: Record<Tab, string> = {
 const actions: Record<string, string> = {
   'shipping.connected': 'Kết nối VNPost',
   'reports.ai.preferences': 'Lưu lựa chọn AI báo cáo',
+  'chat.assistant.configured': 'Cấu hình trợ lý soạn tin nội bộ',
+  'chat.assistant.drafted': 'Tạo bản nháp trợ lý nội bộ',
   'shipping.enabled': 'Bật/tắt đồng bộ VNPost',
   'order.shipping_cost': 'Ghi phí vận chuyển thực trả',
   'order.shipping_updated': 'Cập nhật vận chuyển',

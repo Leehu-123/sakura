@@ -48,6 +48,7 @@ export class TagsDto extends VersionDto {
   tags!: string[];
 }
 export class ReplyDto {
+  @IsOptional() @IsUUID() aiDraftId?: string;
   @IsOptional() @IsIn(['INVOICE']) orderDocument?: 'INVOICE';
   @IsUUID() requestKey!: string;
   @IsString()

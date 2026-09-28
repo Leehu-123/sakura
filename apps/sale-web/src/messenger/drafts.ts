@@ -6,6 +6,7 @@ export type DraftImage = {
 };
 export type SendState = 'CHECKING' | 'NOT_RECORDED' | 'SENDING' | 'UNKNOWN';
 export type Draft = {
+  aiDraftId?: string | null;
   text: string;
   image: DraftImage | null;
   requestKey: string;
@@ -79,6 +80,8 @@ export function createDraftStore(storage: () => Storage, now = Date.now) {
               !/^[a-f0-9-]{36}$/i.test(key) ||
               !d ||
               typeof d.text !== 'string' ||
+              (d.aiDraftId != null &&
+                (typeof d.aiDraftId !== 'string' || !/^[a-f0-9-]{36}$/i.test(d.aiDraftId))) ||
               d.text.length > 2000 ||
               typeof d.requestKey !== 'string' ||
               !/^[a-f0-9-]{36}$/i.test(d.requestKey) ||
@@ -97,6 +100,7 @@ export function createDraftStore(storage: () => Storage, now = Date.now) {
             )
               continue;
             drafts[key] = {
+              ...(d.aiDraftId ? { aiDraftId: d.aiDraftId } : {}),
               text: d.text,
               image: d.image
                 ? {
@@ -119,9 +123,10 @@ export function createDraftStore(storage: () => Storage, now = Date.now) {
     get(id: string): Draft | undefined {
       return drafts[id];
     },
-    edit(id: string, change: Partial<Pick<Draft, 'text' | 'image'>>) {
+    edit(id: string, change: Partial<Pick<Draft, 'text' | 'image' | 'aiDraftId'>>) {
       if (!actor || drafts[id]?.pending) return;
       const d: Draft = {
+        ...(drafts[id]?.aiDraftId ? { aiDraftId: drafts[id].aiDraftId } : {}),
         text: drafts[id]?.text || '',
         image: drafts[id]?.image || null,
         ...change,

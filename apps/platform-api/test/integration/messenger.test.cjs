@@ -1303,3 +1303,88 @@ test('Messenger: webhook, phạm vi, trả lời và đối chiếu kết quả'
   });
 
 });
+
+test('Local assistant: Page catalog, scope, stale drafts, human approval and idempotent send', async (t)=>{
+ const {MessengerConnections}=require('../../dist/messenger/connection.service');
+ const {MessengerTransport}=require('../../dist/messenger/transport');
+ const connections=app.get(MessengerConnections), transport=app.get(MessengerTransport);
+ const oldView=connections.view,oldRuntime=connections.runtime,oldSend=transport.send;
+ let sent=0;
+ const page='777001';
+ connections.view=async()=>({pages:[{pageId:page,name:'Test Page'}]});
+ connections.runtime=async()=>({enabled:true,sendEnabled:true,secret:'test-secret'.repeat(3),verifyToken:'v'.repeat(30),version:'v23.0',pages:[{pageId:page,name:'Test Page',enabled:true,sendEnabled:true,accessToken:'test-only'}]});
+ transport.send=async()=>({state:'SENT',mid:'local-assistant-'+(++sent)});
+ const requestAs=(method,path,jwt,body)=>{const r=http()[method]('/api/v1/messenger'+path).set('Authorization','Bearer '+jwt);return body===undefined?r:r.send(body);};
+ const adminJwt=await mint(admin.id);
+ try {
+  const staff=await db.user.create({data:{email:'assistant-staff@test.local',displayName:'Assistant staff',passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId:regionalRole.id}}}});
+  const outsider=await db.user.create({data:{email:'assistant-other@test.local',displayName:'Assistant other',passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId:regionalRole.id}}}});
+  const staffJwt=await mint(staff.id),otherJwt=await mint(outsider.id);
+  const customer=await db.customer.create({data:{name:'Assistant fixture',phone:'0998765432',address:'Fixture only',createdById:admin.id,assignments:{create:{userId:staff.id,assignedById:admin.id,reason:'Fixture'}}}});
+  const convo=await db.chatConversation.create({data:{pageId:page,psid:'777002',customerId:customer.id,lastInboundAt:new Date(),inboundSeq:1}});
+  await db.chatMessage.create({data:{conversationId:convo.id,direction:'INBOUND',state:'RECEIVED',remoteKey:'assistant-fixture-in',text:'Tôi muốn hỏi giá, liên hệ 0912345678',sourceAt:new Date()}});
+  const p=await db.product.create({data:{name:'Lưới thử',variants:{create:{sku:'ASSISTANT-SKU',name:'Hồng',unit:'cuộn',price:12345}}},include:{variants:true}});
+  const other=await db.product.create({data:{name:'Ngoài Page',variants:{create:{sku:'ASSISTANT-OTHER',name:'Khác',unit:'cuộn',price:999}}},include:{variants:true}});
+  const aid='/assistant/conversations/'+convo.id,path='/conversations/'+convo.id+'/reply';
+  const compose={kind:'PRODUCTS',variantIds:[p.variants[0].id]};
+  const config={version:0,enabled:true,instructions:'Không hứa thời gian giao.',greeting:'Dạ, mẫu của cửa hàng:',policy:'Đổi trả theo chính sách đã xác nhận.',productIds:[p.id]};
+  await t.test('Disabled by default, admin-only setup, exact Page product restriction',async()=>{
+   assert.equal((await requestAs('get',aid,staffJwt).expect(200)).body.enabled,false);
+   await requestAs('post',aid+'/drafts',staffJwt,compose).expect(400);
+   await requestAs('get','/assistant/settings',staffJwt).expect(403);
+   await requestAs('patch','/assistant/pages/'+page,staffJwt,config).expect(403);
+   await requestAs('patch','/assistant/pages/'+page,adminJwt,config).expect(200);
+   await requestAs('patch','/assistant/pages/'+page,adminJwt,config).expect(409);
+   const context=(await requestAs('get',aid,staffJwt).expect(200)).body;
+   assert.equal(context.mode,'LOCAL');assert.match(context.messages[0].text,/\[số điện thoại\]/);
+   const products=(await requestAs('get',aid+'/products?q=ASSISTANT',staffJwt).expect(200)).body;
+   assert.equal(products.length,1);assert.equal(products[0].id,p.variants[0].id);
+   await requestAs('post',aid+'/drafts',staffJwt,{...compose,variantIds:[other.variants[0].id]}).expect(400);
+   await requestAs('post',aid+'/drafts',staffJwt,{...compose,price:'1'}).expect(400);
+   await requestAs('get',aid,otherJwt).expect(404);
+   await requestAs('get',aid+'/products?q=ASSISTANT',otherJwt).expect(404);
+   await requestAs('post',aid+'/drafts',otherJwt,compose).expect(404);
+  });
+  let draft;
+  await t.test('Draft contains server price, never sends, price change invalidates',async()=>{
+   draft=(await requestAs('post',aid+'/drafts',staffJwt,compose).expect(201)).body;
+   assert.match(draft.reply,/12\.345/);assert.equal(sent,0);
+   await db.productVariant.update({where:{id:p.variants[0].id},data:{price:15000,version:{increment:1}}});
+   await requestAs('post',path,staffJwt,{text:draft.reply,aiDraftId:draft.id,requestKey:randomUUID()}).expect(409);
+   assert.equal(sent,0);
+  });
+  await t.test('New inbound invalidates; cross-author and expired draft cannot be sent',async()=>{
+   draft=(await requestAs('post',aid+'/drafts',staffJwt,compose).expect(201)).body;
+   await db.chatConversation.update({where:{id:convo.id},data:{inboundSeq:{increment:1}}});
+   await requestAs('post',path,staffJwt,{text:draft.reply,aiDraftId:draft.id,requestKey:randomUUID()}).expect(409);
+   draft=(await requestAs('post',aid+'/drafts',staffJwt,compose).expect(201)).body;
+   await requestAs('post',path,adminJwt,{text:draft.reply,aiDraftId:draft.id,requestKey:randomUUID()}).expect(409);
+   await db.chatAiDraft.update({where:{id:draft.id},data:{expiresAt:new Date(0)}});
+   await requestAs('post',path,staffJwt,{text:draft.reply,aiDraftId:draft.id,requestKey:randomUUID()}).expect(409);
+   assert.equal(sent,0);
+  });
+  await t.test('Human edits retain attribution, duplicate request sends once and draft cannot be reused',async()=>{
+   draft=(await requestAs('post',aid+'/drafts',staffJwt,compose).expect(201)).body;
+   const body={text:draft.reply+' Em gửi anh/chị tham khảo ạ.',aiDraftId:draft.id,requestKey:randomUUID()};
+   const reply=(await requestAs('post',path,staffJwt,body).expect(201)).body;
+   assert.equal(reply.actorId,staff.id);assert.equal(reply.aiDraftId,draft.id);assert.equal(reply.text,body.text);assert.equal(sent,1);
+   await requestAs('post',path,staffJwt,body).expect(201);assert.equal(sent,1);
+   await requestAs('post',path,staffJwt,{...body,requestKey:randomUUID()}).expect(409);
+   await requestAs('post',path,staffJwt,{...body,aiDraftId:undefined}).expect(409);
+   const detail=(await requestAs('get','/conversations/'+convo.id,staffJwt).expect(200)).body;
+   assert.ok(detail.messages.items.some(m=>m.aiDraftId===draft.id));
+  });
+  await t.test('Policy and active templates are exact; deactivated template and disabled Page invalidate drafts',async()=>{
+   const policy=(await requestAs('post',aid+'/drafts',staffJwt,{kind:'POLICY',variantIds:[]}).expect(201)).body;
+   assert.equal(policy.reply,config.policy);
+   const template=await db.chatTemplate.create({data:{title:'Fixture assistant',text:'Mẫu nội bộ đã duyệt.'}});
+   const d=(await requestAs('post',aid+'/drafts',staffJwt,{kind:'TEMPLATE',variantIds:[],templateId:template.id}).expect(201)).body;
+   assert.equal(d.reply,template.text);
+   await db.chatTemplate.update({where:{id:template.id},data:{isActive:false}});
+   await requestAs('post',path,staffJwt,{text:d.reply,aiDraftId:d.id,requestKey:randomUUID()}).expect(400);
+   await requestAs('patch','/assistant/pages/'+page,adminJwt,{...config,version:1,enabled:false}).expect(200);
+   await requestAs('post',path,staffJwt,{text:policy.reply,aiDraftId:policy.id,requestKey:randomUUID()}).expect(400);
+   assert.equal(sent,1);
+  });
+ }finally{connections.view=oldView;connections.runtime=oldRuntime;transport.send=oldSend;}
+});

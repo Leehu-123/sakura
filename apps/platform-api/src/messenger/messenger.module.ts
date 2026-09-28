@@ -1,4 +1,5 @@
 import { CustomerWorkspace, CustomerWorkspaceController } from './customer-workspace';
+import { ChatAssistant, ChatAssistantController } from './chat-assistant';
 import {
   Body,
   Controller,
@@ -283,6 +284,7 @@ export class MessengerController {
 }
 @Module({
   controllers: [
+    ChatAssistantController,
     CustomerWorkspaceController,
     MessengerWebhook,
     MessengerController,
@@ -293,6 +295,7 @@ export class MessengerController {
     HistoryImportController,
   ],
   providers: [
+    ChatAssistant,
     CustomerWorkspace,
     MessengerService,
     MessengerTransport,

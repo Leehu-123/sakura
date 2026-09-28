@@ -490,6 +490,7 @@ model HistoricalOrder {
 }
 
 model ChatConversation {
+  aiDrafts ChatAiDraft[]
   id             String        @id @default(uuid()) @db.Uuid
   pageId         String
   psid           String
@@ -528,6 +529,8 @@ model ChatConversation {
 }
 
 model ChatMessage {
+  aiDraftId String? @unique @db.Uuid
+  aiDraft ChatAiDraft? @relation(fields: [aiDraftId], references: [id])
   imported        Boolean @default(false)
   id              String           @id @default(uuid()) @db.Uuid
   conversationId  String           @db.Uuid
@@ -705,4 +708,32 @@ model ReportAiConfig {
   allowWeb Boolean @default(false)
   version Int @default(1)
   updatedAt DateTime @updatedAt
+}
+
+model ChatAiPage {
+  pageId String @id
+  enabled Boolean @default(false)
+  instructions String @default("")
+  greeting String @default("Dạ, anh/chị tham khảo thông tin bên dưới nhé.")
+  policy String @default("")
+  productIds String[] @db.Uuid
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model ChatAiDraft {
+  id String @id @default(uuid()) @db.Uuid
+  conversationId String @db.Uuid
+  conversation ChatConversation @relation(fields: [conversationId], references: [id])
+  actorId String @db.Uuid
+  fingerprint String
+  variantIds String[] @db.Uuid
+  reply String
+  summary String
+  warnings String[]
+  products Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  message ChatMessage?
+  @@index([conversationId, actorId, createdAt])
 }

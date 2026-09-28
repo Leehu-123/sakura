@@ -26,6 +26,7 @@ import { confirmation } from './workspace.service';
 import { MessengerTransport } from './transport';
 import { staffingLock, currentWorkShift } from './staffing';
 import { MessengerProfiles } from './profiles';
+import { ChatAssistant } from './chat-assistant';
 const customer = { select: { id: true, name: true } };
 @Injectable()
 export class MessengerService {
@@ -34,6 +35,7 @@ export class MessengerService {
     private readonly transport: MessengerTransport,
     private readonly connections: MessengerConnections,
     private readonly profiles: MessengerProfiles,
+    private readonly assistant: ChatAssistant,
   ) {}
   private tx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) {
     return this.db.$transaction(fn, { isolationLevel: 'Serializable', timeout: 15000 });
@@ -365,6 +367,7 @@ export class MessengerService {
         if (
           existing.conversationId !== id ||
           existing.actorId !== actor.id ||
+          (existing.aiDraftId || null) !== (dto.aiDraftId || null) ||
           (existing.imageId || null) !== (dto.imageId || null) ||
           (existing.attachmentId || null) !== (dto.attachmentId || null) ||
           (existing.orderId || null) !== (dto.orderId || null) ||
@@ -377,6 +380,10 @@ export class MessengerService {
         return { message: existing, c, send: false };
       }
       if (c.blocked) throw new BadRequestException('Hội thoại đang bị chặn trong Sakura.');
+      if (dto.aiDraftId) {
+        if (!dto.text) throw new BadRequestException('Bản nháp trợ lý chỉ dùng cho tin văn bản.');
+        await this.assistant.validateDraft(tx, actor, id, dto.aiDraftId);
+      }
       const shiftId = await currentWorkShift(tx, actor.id, c);
       let image: { mime: string; data: string; title: string; kind?: string } | null = null;
       if (dto.attachmentId) {
@@ -428,6 +435,7 @@ export class MessengerService {
           conversationId: id,
           actorId: actor.id,
           requestKey: dto.requestKey,
+          aiDraftId: dto.aiDraftId,
           shiftId,
           direction: 'OUTBOUND',
           state: 'SENDING',

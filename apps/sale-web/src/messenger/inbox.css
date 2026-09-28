@@ -1067,3 +1067,110 @@
 .sent-media-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.sent-media-thumb{height:64px;display:grid;place-items:center;border:1px solid #dce2e9;border-radius:6px;background:#f4f6fa;padding:0;overflow:hidden;color:#64748b}.sent-media-thumb img{width:100%;height:100%;object-fit:cover}.sent-media-preview{max-width:100%;max-height:65vh;object-fit:contain}.order-print table{width:100%;font-size:12px}.order-print th,.order-print td{text-align:left;padding:8px;border-bottom:1px solid #ddd}
 @media(max-width:1279px){.social-workspace .chat-thread-with-customer>.customer-pane.customer-workspace{display:none}.social-workspace .customer-open>.customer-pane.customer-workspace{display:flex;padding-top:45px}}
 
+.assistant-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+}
+.assistant-composer-actions small {
+  color: #687182;
+}
+.assistant-search {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.assistant-search input {
+  min-width: 0;
+  flex: 1;
+}
+.assistant-products {
+  display: grid;
+  gap: 7px;
+  max-height: 220px;
+  overflow: auto;
+  margin: 10px 0;
+}
+.assistant-product {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #f8f9fc;
+  border: 1px solid #e0e5ef;
+  border-radius: 8px;
+  text-align: left;
+}
+.assistant-product strong {
+  flex-basis: 100%;
+}
+.assistant-product small {
+  color: #64748b;
+}
+.assistant-selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0;
+}
+.assistant-selection > span {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #fff0f5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assistant-selection button {
+  border: 0;
+  background: transparent;
+}
+.assistant-context {
+  border: 1px solid #e1e5ed;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.assistant-context p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.assistant-context[open] {
+  max-height: 260px;
+  overflow: auto;
+}
+.assistant-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.assistant-draft {
+  margin-top: 16px;
+  padding: 16px;
+  background: #fff6fa;
+  border: 1px solid #efd3df;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+}
+.assistant-draft textarea {
+  width: 100%;
+}
+.assistant-draft p {
+  margin: 0;
+}
+.assistant-settings > p {
+  margin: 16px 24px;
+}
+.assistant-check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.assistant-check input {
+  width: auto;
+}

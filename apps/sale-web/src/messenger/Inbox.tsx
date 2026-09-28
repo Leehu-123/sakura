@@ -17,9 +17,12 @@ import {
   Link2,
   PackageCheck,
   Image as ImageIcon,
+  Sparkles,
 } from 'lucide-react';
 import { QuickLabels, Toolbar, defaultToolbar } from './QuickLabels';
 import { ComposerTools, AttachmentCard } from './ComposerTools';
+import { ChatAssistantDialog } from './ChatAssistant';
+import { ChatAssistantSettings } from './ChatAssistantSettings';
 import { ContactAvatar, ContactTags, contactName } from './ContactIdentity';
 import { NotificationSound } from './NotificationSound';
 import { isSendKey } from './composerKeys';
@@ -59,6 +62,7 @@ type Conversation = {
   customer: { id: string; name: string } | null;
 };
 type Message = {
+  aiDraftId?: string | null;
   imported?: boolean;
   id: string;
   text: string;
@@ -110,6 +114,7 @@ function Thread({
     [library, setLibrary] = useState(false),
     [tools, setTools] = useState<'support' | 'block' | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const composing = useRef(false);
   const sending = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -235,7 +240,10 @@ function Thread({
             ? attempt.image.attachment
               ? { attachmentId: attempt.image.id }
               : { imageId: attempt.image.id }
-            : { text: attempt.text }),
+            : {
+                text: attempt.text,
+                ...(attempt.aiDraftId ? { aiDraftId: attempt.aiDraftId } : {}),
+              }),
           requestKey: attempt.requestKey,
         },
         true,
@@ -435,7 +443,8 @@ function Thread({
                     >
                       {m.imported
                         ? 'Gửi từ Facebook · chưa xác định nhân viên'
-                        : 'Người gửi: ' + (m.actor?.displayName || 'Chưa ghi nhận')}{' '}
+                        : (m.aiDraftId ? 'Trợ lý nội bộ soạn · Duyệt gửi: ' : 'Người gửi: ') +
+                          (m.actor?.displayName || 'Chưa ghi nhận')}{' '}
                       · {date(m.sourceAt)}
                     </small>
                   )}
@@ -492,6 +501,44 @@ function Thread({
               changed={refresh}
             />
             <div className="chat-composer">
+              <div className="assistant-composer-actions">
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={busy || !!pending || !!result.error}
+                  onClick={() => setAssistantOpen(true)}
+                >
+                  <Sparkles size={16} />
+                  Trợ lý soạn tin
+                </button>
+                {draft?.aiDraftId && (
+                  <>
+                    <small>Bản nháp nội bộ · Bạn kiểm tra rồi bấm gửi</small>
+                    <button
+                      type="button"
+                      className="text-button"
+                      disabled={busy || !!pending}
+                      onClick={() => chatDrafts.edit(id, { text: '', aiDraftId: null })}
+                    >
+                      Bỏ bản nháp trợ lý
+                    </button>
+                  </>
+                )}
+              </div>
+              {assistantOpen && (
+                <ChatAssistantDialog
+                  key={id}
+                  id={id}
+                  templates={templates.data || []}
+                  replaceExisting={!!text.trim()}
+                  close={() => setAssistantOpen(false)}
+                  apply={(value) => {
+                    chatDrafts.edit(id, { text: value.reply, aiDraftId: value.id });
+                    setAssistantOpen(false);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                />
+              )}
               <ComposerTools
                 id={id}
                 disabled={busy || !!pending}
@@ -999,6 +1046,7 @@ export function Inbox({ actor }: { actor: Actor }) {
               )}
             </section>
           )}
+          {section === 'config' && has(actor, 'core.messenger.manage') && <ChatAssistantSettings />}
           {section === 'config' && has(actor, 'core.messenger.manage') && (
             <FanpageSettings changed={() => setRevision((v) => v + 1)} />
           )}
