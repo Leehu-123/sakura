@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { BarChart3, Download, RefreshCw, ArrowRight } from 'lucide-react';
 import { useResource, State } from './shared';
+import { MonthlyComparison, MonthMetrics } from './MonthlyComparison';
+import { ReportAiPanel } from './ReportAiSettings';
 type Metrics = {
   shippingCharged: string;
   shippingEstimated: string;
@@ -23,6 +25,9 @@ type Metrics = {
 };
 type Row = Metrics & { label: string; source?: string };
 type Report = {
+  comparison?: MonthMetrics[];
+  comparisonFrom?: string;
+  comparisonTo?: string;
   carriers: Row[];
   from: string;
   to: string;
@@ -52,6 +57,28 @@ function exportReport(d: Report) {
       'Còn phải thu đã biết (VND)',
     ],
     ...d.timeline.map((r) => [r.label, r.validOrders, r.sales, r.paid, r.unpaid]),
+    [],
+    ['So sánh tháng', d.comparisonFrom || '', d.comparisonTo || ''],
+    [
+      'Tháng',
+      'Đơn hợp lệ',
+      'Đơn hủy',
+      'Doanh số (VND)',
+      'Đã thu (VND)',
+      'Phí thu khách (VND)',
+      'Phí thực trả đã biết (VND)',
+      'Đơn thiếu phí thực trả',
+    ],
+    ...(d.comparison || []).map((r) => [
+      r.label,
+      r.validOrders,
+      r.cancelled,
+      r.sales,
+      r.paid,
+      r.shippingCharged,
+      r.shippingActual,
+      r.shippingUnknown,
+    ]),
     [],
     ['Nguồn', 'Người chốt', 'Đơn hợp lệ', 'Doanh số (VND)'],
     ...d.staff.map((r) => [r.source || '', r.label, r.validOrders, r.sales]),
@@ -99,15 +126,18 @@ function exportReport(d: Report) {
 export function SalesReport({
   detailed = false,
   openReports,
+  openAiSettings,
 }: {
   detailed?: boolean;
   openReports: () => void;
+  openAiSettings?: () => void;
 }) {
   const today = localDay();
   const [from, setFrom] = useState(today.slice(0, 8) + '01'),
     [to, setTo] = useState(today),
-    [source, setSource] = useState('ALL');
-  const [query, setQuery] = useState({ from, to, source }),
+    [source, setSource] = useState('ALL'),
+    [months, setMonths] = useState('6');
+  const [query, setQuery] = useState({ from, to, source, months }),
     [revision, setRevision] = useState(0);
   const result = useResource<Report>('/sales/reports?' + new URLSearchParams(query), revision),
     d = result.data;
@@ -143,7 +173,7 @@ export function SalesReport({
         className="panel report-filters"
         onSubmit={(e) => {
           e.preventDefault();
-          setQuery({ from, to, source });
+          setQuery({ from, to, source, months });
           setRevision((v) => v + 1);
         }}
       >
@@ -161,6 +191,16 @@ export function SalesReport({
             <option value="ALL">Sakura + Sapo</option>
             <option value="SAKURA">Sakura</option>
             <option value="SAPO">Sapo đã nhập</option>
+          </select>
+        </label>
+        <label>
+          So sánh tháng
+          <select value={months} onChange={(e) => setMonths(e.target.value)}>
+            {['3', '6', '12'].map((n) => (
+              <option key={n} value={n}>
+                {n} tháng đến ngày kết thúc
+              </option>
+            ))}
           </select>
         </label>
         <button className="primary">
@@ -245,6 +285,10 @@ export function SalesReport({
                 'Số đã thu/còn phải thu chưa bao gồm đơn thiếu dữ liệu thanh toán.'}
             </p>
           )}
+          {d.comparison && (
+            <MonthlyComparison rows={d.comparison} from={d.comparisonFrom!} to={d.comparisonTo!} />
+          )}
+          {detailed && <ReportAiPanel openSettings={openAiSettings} />}
           <section className="panel">
             <div className="panel-head">
               <h2>Chi phí vận chuyển</h2>

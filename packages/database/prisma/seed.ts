@@ -2,6 +2,7 @@ import { PrismaClient, AccessScope } from '@prisma/client';
 import { hashPassword } from '../../../apps/platform-api/src/auth/password';
 const db = new PrismaClient();
 const entries: Array<[string, string, AccessScope[]]> = [
+  ['core.ai.manage', 'Cấu hình AI báo cáo', ['GLOBAL']],
   ['core.shipping.manage', 'Cấu hình kết nối vận chuyển', ['GLOBAL']],
   ['catalog.products.read', 'Xem sản phẩm và bảng giá', ['GLOBAL']],
   ['catalog.products.manage', 'Quản lý sản phẩm và bảng giá', ['GLOBAL']],

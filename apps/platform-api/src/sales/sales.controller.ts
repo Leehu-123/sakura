@@ -174,12 +174,26 @@ export class SalesController {
   }
 }
 import { TasksController } from './tasks.controller';
+import { ReportAiController, ReportAiSettings } from './report-ai';
 import { TasksService } from './tasks.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 
 @Module({
-  controllers: [SalesController, ReportsController, TasksController, DashboardController],
-  providers: [SalesService, OrderFeedService, SalesReports, TasksService, DashboardService],
+  controllers: [
+    SalesController,
+    ReportsController,
+    ReportAiController,
+    TasksController,
+    DashboardController,
+  ],
+  providers: [
+    SalesService,
+    OrderFeedService,
+    SalesReports,
+    ReportAiSettings,
+    TasksService,
+    DashboardService,
+  ],
 })
 export class SalesModule {}

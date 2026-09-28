@@ -698,3 +698,11 @@ model TelegramConfig {
   enabled   Boolean  @default(false)
   updatedAt DateTime @updatedAt
 }
+
+model ReportAiConfig {
+  id Int @id @default(1)
+  provider String @default("OPENAI")
+  allowWeb Boolean @default(false)
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+}

@@ -537,6 +537,7 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
       await historical('archive', 'Đã lưu trữ', 4000, null);
       await historical('draft', 'Đặt hàng', 500, 0);
       await historical('previous', 'Đã hoàn thành', 200, 200, '2025-05-31T03:00:00Z');
+      await historical('older-month', 'Đã hoàn thành', 700, 700, '2025-04-30T16:59:59Z');
       await historical('unlinked', 'Đã hoàn thành', 9000, 9000, '2025-06-01T03:00:00Z', null);
       await db.order.create({
         data: {
@@ -570,6 +571,20 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
       assert.equal(r.summary.unclassified, 1);
       assert.equal(r.previous.sales, '200');
       assert.equal(r.timeline[0].label, '2025-06-01');
+      assert.equal(r.comparisonFrom, '2025-01-01');
+      assert.equal(r.comparisonTo, '2025-06-01');
+      assert.equal(r.comparison.length, 6);
+      assert.equal(r.comparison[0].sales, '0');
+      assert.equal(r.comparison[0].validOrders, 0);
+      assert.equal(r.comparison[3].label, '2025-04');
+      assert.equal(r.comparison[3].sales, '700');
+      assert.equal(r.comparison[4].sales, '200');
+      assert.equal(r.comparison[5].sales, '3500');
+      assert.equal((await get(path + '&months=3&source=SAKURA', ta).expect(200)).body.comparison[2].sales, '500');
+      assert.ok((await get(path + '&months=12', tb).expect(200)).body.comparison.every(r => r.sales === '0'));
+      const crossing = (await get('/sales/reports?from=2025-01-01&to=2025-01-31&months=3', ta).expect(200)).body;
+      assert.deepEqual(crossing.comparison.map(r => r.label), ['2024-11', '2024-12', '2025-01']);
+      await get(path + '&months=99', ta).expect(400);
       assert.equal((await get(path + '&source=SAPO', ta).expect(200)).body.summary.sales, '3000');
       assert.equal((await get(path, tb).expect(200)).body.summary.orders, 0);
       assert.equal((await get(path, tl).expect(200)).body.summary.sales, '12500');
@@ -584,6 +599,22 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
         },
       });
       await get(path, await mint(denied.id)).expect(403);
+      await get('/sales/report-ai/config', ta).expect(403);
+      await get('/sales/report-ai/status', await mint(denied.id)).expect(403);
+      assert.equal((await get('/sales/report-ai/status', ta).expect(200)).body.enabled, false);
+      await db.user.update({ where: { id: admin.id }, data: { mustChangePassword: false } });
+      const adminToken = await mint(admin.id);
+      const config = (await get('/sales/report-ai/config', adminToken).expect(200)).body;
+      assert.equal(config.version, 0);
+      const saved = (await send('patch', '/sales/report-ai/config', adminToken, { version: 0, provider: 'GEMINI', allowWeb: true }).expect(200)).body;
+      assert.equal(saved.provider, 'GEMINI');
+      assert.equal(saved.allowWeb, true);
+      assert.equal(saved.enabled, false);
+      assert.equal(saved.status, 'AWAITING_API_SETUP');
+      await send('patch', '/sales/report-ai/config', ta, { version: 1, provider: 'OPENAI', allowWeb: false }).expect(403);
+      await send('patch', '/sales/report-ai/config', adminToken, { version: 0, provider: 'OPENAI', allowWeb: false }).expect(409);
+      await send('patch', '/sales/report-ai/config', adminToken, { version: 1, provider: 'OTHER', allowWeb: false }).expect(400);
+      await send('patch', '/sales/report-ai/config', adminToken, { version: 1, provider: 'OPENAI', allowWeb: false, apiKey: 'not-accepted' }).expect(400);
     },
   );
 });

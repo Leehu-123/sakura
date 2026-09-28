@@ -3031,6 +3031,130 @@ dialog::backdrop {
   gap: 4px;
   white-space: nowrap;
 }
+.month-metric-tabs,
+.month-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 24px;
+}
+.monthly-comparison > p {
+  margin: 16px 24px;
+}
+.month-legend span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.month-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: #ac2055;
+}
+.month-legend span:nth-child(2) i {
+  background: #548eaa;
+}
+.month-chart-scroll {
+  overflow-x: auto;
+  padding-top: 24px;
+}
+.month-columns {
+  display: flex;
+  min-width: 450px;
+  gap: 16px;
+  padding: 0 16px;
+}
+.month-column {
+  flex: 1;
+  min-width: 72px;
+  text-align: center;
+}
+.month-bar-pair {
+  height: 210px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 7px;
+  border-bottom: 1px solid #cbd5e1;
+  background: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent 51px,
+    #eef1f5 51px,
+    #eef1f5 52px
+  );
+}
+.month-bar {
+  width: 28px;
+  max-width: 40%;
+  background: #ac2055;
+  border-radius: 5px 5px 0 0;
+  position: relative;
+}
+.month-bar-1 {
+  background: #548eaa;
+}
+.month-bar span {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  color: #475569;
+}
+.month-column strong,
+.month-column small {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.month-column small {
+  color: #64748b;
+  min-height: 16px;
+}
+.monthly-comparison .panel-head p {
+  margin-bottom: 0;
+}
+.report-ai-panel {
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  background: linear-gradient(115deg, #fff7fa, #f4f8ff);
+}
+.report-ai-panel h2,
+.report-ai-settings h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.report-ai-panel > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.report-ai-settings {
+  padding: 24px;
+  max-width: 850px;
+}
+.ai-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ai-checkbox input {
+  width: auto;
+}
+@media (max-width: 800px) {
+  .report-ai-panel {
+    flex-direction: column;
+  }
+}
 .kanban-card[draggable='true'] {
   cursor: grab;
 }

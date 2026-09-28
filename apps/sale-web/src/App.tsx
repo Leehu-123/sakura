@@ -36,6 +36,7 @@ import { MyTasks } from './sales/MyTasks';
 import { CalendarCheck, Kanban, ListTodo } from 'lucide-react';
 import { TelegramSettings } from './TelegramSettings';
 import { ShippingSettings } from './shipping/ShippingSettings';
+import { ReportAiSettings } from './sales/ReportAiSettings';
 type Grant = { permission: string; scope: string };
 type Me = {
   id: string;
@@ -87,6 +88,7 @@ type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
 type Tab =
   | 'settings'
   | 'shipping'
+  | 'report-ai'
   | 'reports'
   | 'storage'
   | 'overview'
@@ -118,6 +120,7 @@ const scopes: Record<string, string> = {
 const titles: Record<Tab, string> = {
   settings: 'Cài đặt',
   shipping: 'Vận chuyển',
+  'report-ai': 'AI báo cáo',
   reports: 'Báo cáo',
   storage: 'Lưu trữ & sao lưu',
   customers: 'Khách hàng',
@@ -139,6 +142,7 @@ const titles: Record<Tab, string> = {
 };
 const actions: Record<string, string> = {
   'shipping.connected': 'Kết nối VNPost',
+  'reports.ai.preferences': 'Lưu lựa chọn AI báo cáo',
   'shipping.enabled': 'Bật/tắt đồng bộ VNPost',
   'order.shipping_cost': 'Ghi phí vận chuyển thực trả',
   'order.shipping_updated': 'Cập nhật vận chuyển',
@@ -669,10 +673,18 @@ function Workspace({
       ['audit', 'core.audit.read'],
       ['telegram', 'core.users.manage'],
       ['shipping', 'core.shipping.manage'],
+      ['report-ai', 'core.ai.manage'],
     ] as const
   ).filter(([, p]) => can(p));
   const accountSection = ['users', 'roles', 'catalogs'].includes(tab);
-  const settingSection = ['storage', 'imports', 'audit', 'telegram', 'shipping'].includes(tab);
+  const settingSection = [
+    'storage',
+    'imports',
+    'audit',
+    'telegram',
+    'shipping',
+    'report-ai',
+  ].includes(tab);
   const nav: {
     id: Tab;
     icon: typeof Users;
@@ -861,6 +873,7 @@ function Workspace({
               {tab === 'storage' && <Storage />}
               {tab === 'telegram' && <TelegramSettings />}
               {tab === 'shipping' && <ShippingSettings />}
+              {tab === 'report-ai' && <ReportAiSettings />}
               {tab === 'orders' && <Orders actor={me} />}
               {tab === 'imports' && <Imports />}
               {tab === 'historical' && <HistoricalOrders />}
@@ -889,6 +902,7 @@ function Workspace({
                     key={tab}
                     detailed={tab === 'reports'}
                     openReports={() => navigate('reports')}
+                    openAiSettings={can('core.ai.manage') ? () => navigate('report-ai') : undefined}
                   />
                 ) : (
                   <section className="panel empty">

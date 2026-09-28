@@ -5,6 +5,7 @@ import { Database } from '../db';
 import { CurrentUser, RequirePermission } from '../auth/access';
 import { Principal, hasPermission } from '../auth/policy';
 export class ReportQuery {
+  @IsOptional() @IsIn(['3', '6', '12']) months = '6';
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) from?: string;
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) to?: string;
   @IsOptional() @IsIn(['ALL', 'SAKURA', 'SAPO']) source = 'ALL';
@@ -35,6 +36,14 @@ export class SalesReports {
   constructor(private readonly db: Database) {}
   async read(actor: Principal, q: ReportQuery) {
     const r = reportRange(q);
+    const monthLabels = Array.from({ length: Number(q.months || 6) }, (_, i) => {
+      const d = new Date(
+        Date.UTC(Number(r.to.slice(0, 4)), Number(r.to.slice(5, 7)) - Number(q.months || 6) + i, 1),
+      );
+      return d.toISOString().slice(0, 7);
+    });
+    const monthStart = new Date(monthLabels[0] + '-01T00:00:00+07:00');
+    const feedStart = new Date(Math.min(r.previousStart.getTime(), monthStart.getTime()));
     const source = q.source || 'ALL';
     const scope = hasPermission(actor.grants, 'sales.reports.read', 'GLOBAL')
       ? Prisma.sql`TRUE`
@@ -46,7 +55,7 @@ export class SalesReports {
       o."shippingFee" "shippingCharged",o."shippingCost" "shippingActual",o."carrierEstimatedFee" "shippingEstimated",COALESCE(NULLIF(o."carrierName",''),'Chưa có đối tác') carrier,
       CASE WHEN o.status IN ('CONFIRMED','COMPLETED') THEN 'VALID' WHEN o.status='CANCELLED' THEN 'CANCELLED' ELSE 'DRAFT' END category,
       COALESCE(u."displayName",'Chưa ghi nhận') closer,COALESCE(o."closedByUserId"::text,'unknown') "closerKey"
-      FROM "Order" o LEFT JOIN "User" u ON u.id=o."closedByUserId" WHERE o."createdAt">=(${r.previousStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND o."createdAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+      FROM "Order" o LEFT JOIN "User" u ON u.id=o."closedByUserId" WHERE o."createdAt">=(${feedStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND o."createdAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
       UNION ALL
       SELECT h.id,'SAPO',h."customerId",h."orderedAt",h.total,h."paidAmount",h."sourceStatus",
       h."shippingFee",NULL::numeric,NULL::numeric,'Sapo (chưa có dữ liệu đối tác)',
@@ -54,7 +63,7 @@ export class SalesReports {
       WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đã hủy','đã huỷ','hủy','huỷ','cancelled','canceled') THEN 'CANCELLED'
       WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đặt hàng','nháp','draft') THEN 'DRAFT' ELSE 'UNKNOWN' END,
       COALESCE(NULLIF(h."sourceClosedBy",''),'Chưa ghi nhận'),COALESCE(NULLIF(h."sourceClosedBy",''),'unknown')
-      FROM "HistoricalOrder" h WHERE h."orderedAt">=(${r.previousStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND h."orderedAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+      FROM "HistoricalOrder" h WHERE h."orderedAt">=(${feedStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND h."orderedAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
     ), visible AS(SELECT * FROM feed f WHERE ${scope} AND (${source}='ALL' OR source=${source})), current AS(SELECT * FROM visible WHERE at>=(${r.start.toISOString()}::timestamptz AT TIME ZONE 'UTC'))`;
     const metrics = Prisma.sql`COUNT(*)::int orders,COUNT(*) FILTER(WHERE category='VALID')::int "validOrders",
       COUNT(*) FILTER(WHERE category='CANCELLED')::int cancelled,COUNT(*) FILTER(WHERE category='DRAFT')::int draft,
@@ -78,8 +87,19 @@ export class SalesReports {
           Prisma.sql`${base} SELECT ${metrics} FROM current`,
         );
         const previous = await tx.$queryRaw<any[]>(
-          Prisma.sql`${base} SELECT ${metrics} FROM visible WHERE at<(${r.start.toISOString()}::timestamptz AT TIME ZONE 'UTC')`,
+          Prisma.sql`${base} SELECT ${metrics} FROM visible WHERE at>=(${r.previousStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND at<(${r.start.toISOString()}::timestamptz AT TIME ZONE 'UTC')`,
         );
+        const monthly = await tx.$queryRaw<any[]>(
+          Prisma.sql`${base} SELECT to_char(at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh','YYYY-MM') label,${metrics} FROM visible WHERE at>=(${monthStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') GROUP BY label ORDER BY label`,
+        );
+        const empty = Object.fromEntries(
+          Object.entries(summary[0]).map(([k, v]) => [k, typeof v === 'number' ? 0 : '0']),
+        );
+        const comparison = monthLabels.map((label) => ({
+          ...empty,
+          ...monthly.find((row) => row.label === label),
+          label,
+        }));
         const bucket = r.days > 62 ? 'month' : 'day';
         const timeline = await tx.$queryRaw(
           Prisma.sql`${base} SELECT to_char(date_trunc(${bucket},at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh'),'YYYY-MM-DD') label,${metrics} FROM current GROUP BY label ORDER BY label`,
@@ -101,6 +121,9 @@ export class SalesReports {
           to: r.to,
           source,
           bucket,
+          comparison,
+          comparisonFrom: monthLabels[0] + '-01',
+          comparisonTo: r.to,
           summary: summary[0],
           previous: previous[0],
           timeline,
