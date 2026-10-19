@@ -3,6 +3,13 @@ import { Plus, Phone, MessageCircle, Home, Pencil, Trash } from 'lucide-react';
 import { api } from '../api';
 import { Actor, Page, date } from './types';
 import { useResource, State, Modal, Form, Pager, SearchBox } from './shared';
+import {
+  TaskPeopleFields,
+  TaskPeopleSummary,
+  SharedTaskStatus,
+  taskPeopleBody,
+  TaskParticipant,
+} from './TaskPeople';
 
 export type Task = {
   id: string;
@@ -18,6 +25,9 @@ export type Task = {
   version: number;
   customer?: { id: string; name: string } | null;
   user?: { id: string; displayName: string };
+  participants: TaskParticipant[];
+  canManage: boolean;
+  canUpdateStatus: boolean;
 };
 
 export function MyTasks({ actor }: { actor: Actor }) {
@@ -28,24 +38,26 @@ export function MyTasks({ actor }: { actor: Actor }) {
   const [modal, setModal] = useState<'create' | Task | null>(null);
 
   const result = useResource<Page<Task>>(
-    '/sales/tasks?page=' + page + '&pageSize=20' + 
-    (status ? '&status=' + status : '') + 
-    (search ? '&search=' + encodeURIComponent(search) : ''),
-    revision
+    '/sales/tasks?page=' +
+      page +
+      '&pageSize=20' +
+      (status ? '&status=' + status : '') +
+      (search ? '&search=' + encodeURIComponent(search) : ''),
+    revision,
   );
 
   const toggleTask = async (task: Task) => {
     await api('/sales/tasks/' + task.id, 'PATCH', {
       version: task.version,
-      status: task.status === 'DONE' ? 'TODO' : 'DONE'
+      status: task.status === 'DONE' ? 'TODO' : 'DONE',
     });
-    setRevision(r => r + 1);
+    setRevision((r) => r + 1);
   };
 
   const deleteTask = async (task: Task) => {
     if (!confirm('Bạn có chắc chắn muốn xóa công việc này?')) return;
     await api('/sales/tasks/' + task.id, 'DELETE');
-    setRevision(r => r + 1);
+    setRevision((r) => r + 1);
   };
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -60,12 +72,24 @@ export function MyTasks({ actor }: { actor: Actor }) {
           <Plus size={18} /> Tạo mới
         </button>
       </div>
-      
+
       <div className="sales-toolbar">
-        <SearchBox placeholder="Tìm công việc…" onSearch={s => { setSearch(s); setPage(1); }} />
+        <SearchBox
+          placeholder="Tìm công việc…"
+          onSearch={(s) => {
+            setSearch(s);
+            setPage(1);
+          }}
+        />
         <label className="filter-label">
           Trạng thái
-          <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
             <option value="">Tất cả</option>
             <option value="TODO">Cần làm</option>
             <option value="IN_PROGRESS">Đang làm</option>
@@ -79,18 +103,35 @@ export function MyTasks({ actor }: { actor: Actor }) {
       {result.data && (
         <section className="panel">
           <div className="task-list" style={{ padding: 24 }}>
-            {(result.data.items || []).map(t => {
+            {(result.data.items || []).map((t) => {
               const isOverdue = t.dueDate && t.dueDate < todayStr && t.status !== 'DONE';
               const isToday = t.dueDate === todayStr && t.status !== 'DONE';
               return (
                 <div className="task-item" key={t.id}>
-                  <input type="checkbox" checked={t.status === 'DONE'} onChange={() => toggleTask(t)} />
+                  <input
+                    type="checkbox"
+                    checked={t.status === 'DONE'}
+                    disabled={!t.canUpdateStatus}
+                    onChange={() => toggleTask(t)}
+                    aria-label={'Hoàn thành ' + t.title}
+                  />
                   <span className={`priority-dot --${(t.priority || 'normal').toLowerCase()}`} />
-                  <div style={{ flex: 1, textDecoration: t.status === 'DONE' ? 'line-through' : 'none' }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      textDecoration: t.status === 'DONE' ? 'line-through' : 'none',
+                    }}
+                  >
                     <strong>{t.title}</strong>
+                    {t.note && <p className="task-note">{t.note}</p>}
+                    <TaskPeopleSummary task={t} />
+                    <SharedTaskStatus task={t} changed={() => setRevision((r) => r + 1)} />
                     {t.customer?.name && <span className="badge">{t.customer.name}</span>}
                     {t.dueDate && (
-                      <small className={`block ${isOverdue ? 'overdue' : ''}`} style={{ color: isToday ? '#d97706' : undefined }}>
+                      <small
+                        className={`block ${isOverdue ? 'overdue' : ''}`}
+                        style={{ color: isToday ? '#d97706' : undefined }}
+                      >
                         Hạn: {date(t.dueDate)}
                       </small>
                     )}
@@ -98,11 +139,17 @@ export function MyTasks({ actor }: { actor: Actor }) {
                   {t.contactChannel === 'phone' && <Phone size={16} />}
                   {t.contactChannel === 'zalo' && <MessageCircle size={16} />}
                   {t.contactChannel === 'visit' && <Home size={16} />}
-                  
-                  <div className="row-actions" style={{ marginLeft: 12 }}>
-                    <button className="icon-button" onClick={() => setModal(t)}><Pencil size={16} /></button>
-                    <button className="icon-button" onClick={() => deleteTask(t)}><Trash size={16} /></button>
-                  </div>
+
+                  {t.canManage && (
+                    <div className="row-actions" style={{ marginLeft: 12 }}>
+                      <button className="icon-button" onClick={() => setModal(t)}>
+                        <Pencil size={16} />
+                      </button>
+                      <button className="icon-button" onClick={() => deleteTask(t)}>
+                        <Trash size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -113,35 +160,49 @@ export function MyTasks({ actor }: { actor: Actor }) {
       )}
 
       {modal && (
-        <TaskModal 
-          task={modal === 'create' ? null : modal} 
-          close={() => setModal(null)} 
-          done={() => { setModal(null); setRevision(r => r + 1); }} 
+        <TaskModal
+          task={modal === 'create' ? null : modal}
+          close={() => setModal(null)}
+          done={() => {
+            setModal(null);
+            setRevision((r) => r + 1);
+          }}
         />
       )}
     </>
   );
 }
 
-function TaskModal({ task, close, done }: { task: Task | null, close: () => void, done: () => void }) {
+function TaskModal({
+  task,
+  close,
+  done,
+}: {
+  task: Task | null;
+  close: () => void;
+  done: () => void;
+}) {
   const [search, setSearch] = useState('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const customers = useResource<Page<any>>('/sales/customers?pageSize=20&search=' + encodeURIComponent(search));
-  
+  const customers = useResource<Page<any>>(
+    '/sales/customers?pageSize=20&search=' + encodeURIComponent(search),
+  );
+
   return (
     <Modal title={task ? 'Sửa công việc' : 'Thêm công việc'} close={close}>
       <Form
         label="Lưu"
         done={done}
-        submit={async f => {
+        submit={async (f) => {
           const body = {
+            ...taskPeopleBody(f),
             title: f.get('title'),
             note: f.get('note'),
             customerId: f.get('customerId') || null,
             dueDate: f.get('dueDate') || null,
             priority: f.get('priority'),
             contactChannel: f.get('contactChannel'),
-            ...(task ? { version: task.version, status: f.get('status') } : {})
+            ...(task ? { version: task.version, status: f.get('status') } : {}),
           };
           await api('/sales/tasks' + (task ? '/' + task.id : ''), task ? 'PATCH' : 'POST', body);
         }}
@@ -152,19 +213,30 @@ function TaskModal({ task, close, done }: { task: Task | null, close: () => void
         </label>
         <label>
           Khách hàng
-          <input type="text" placeholder="Tìm tên khách hàng..." value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 8 }} />
+          <input
+            type="text"
+            placeholder="Tìm tên khách hàng..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ marginBottom: 8 }}
+          />
           <select name="customerId" defaultValue={task?.customer?.id || ''}>
             <option value="">Chưa chọn</option>
             {task?.customer && <option value={task.customer.id}>{task.customer.name}</option>}
-            {customers.data?.items?.filter((c: any) => c.id !== task?.customer?.id).map((c: any) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
+            {customers.data?.items
+              ?.filter((c: any) => c.id !== task?.customer?.id)
+              .map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
           </select>
         </label>
         <label>
           Ghi chú
           <textarea name="note" defaultValue={task?.note} />
         </label>
+        <TaskPeopleFields task={task} />
         <div className="form-grid">
           <label>
             Hạn chót

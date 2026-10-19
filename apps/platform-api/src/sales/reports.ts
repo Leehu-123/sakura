@@ -53,7 +53,7 @@ export class SalesReports {
     const base = Prisma.sql`WITH feed AS (
       SELECT o.id,'SAKURA'::text source,o."customerId",o."createdAt" at,o.total,o."paidAmount" paid,o.status::text status,
       o."shippingFee" "shippingCharged",o."shippingCost" "shippingActual",o."carrierEstimatedFee" "shippingEstimated",COALESCE(NULLIF(o."carrierName",''),'Chưa có đối tác') carrier,
-      CASE WHEN o.status IN ('CONFIRMED','COMPLETED') THEN 'VALID' WHEN o.status='CANCELLED' THEN 'CANCELLED' ELSE 'DRAFT' END category,
+      CASE WHEN o.status IN ('CONFIRMED','COMPLETED') THEN 'VALID' WHEN o.status='CANCELLED' THEN 'CANCELLED' WHEN o.status='RETURNED' THEN 'RETURNED' ELSE 'DRAFT' END category,
       COALESCE(u."displayName",'Chưa ghi nhận') closer,COALESCE(o."closedByUserId"::text,'unknown') "closerKey"
       FROM "Order" o LEFT JOIN "User" u ON u.id=o."closedByUserId" WHERE o."createdAt">=(${feedStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND o."createdAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
       UNION ALL
@@ -61,11 +61,14 @@ export class SalesReports {
       h."shippingFee",NULL::numeric,NULL::numeric,'Sapo (chưa có dữ liệu đối tác)',
       CASE WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đã hoàn thành','hoàn thành','đang giao dịch','đã xác nhận','completed','confirmed') THEN 'VALID'
       WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đã hủy','đã huỷ','hủy','huỷ','cancelled','canceled') THEN 'CANCELLED'
+      WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('hàng hoàn','hoàn hàng','đã hoàn hàng','trả hàng','đã trả hàng','returned') THEN 'RETURNED'
       WHEN lower(translate(trim(h."sourceStatus"),'ÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ','àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ')) IN ('đặt hàng','nháp','draft') THEN 'DRAFT' ELSE 'UNKNOWN' END,
       COALESCE(NULLIF(h."sourceClosedBy",''),'Chưa ghi nhận'),COALESCE(NULLIF(h."sourceClosedBy",''),'unknown')
       FROM "HistoricalOrder" h WHERE h."orderedAt">=(${feedStart.toISOString()}::timestamptz AT TIME ZONE 'UTC') AND h."orderedAt"<(${r.end.toISOString()}::timestamptz AT TIME ZONE 'UTC')
     ), visible AS(SELECT * FROM feed f WHERE ${scope} AND (${source}='ALL' OR source=${source})), current AS(SELECT * FROM visible WHERE at>=(${r.start.toISOString()}::timestamptz AT TIME ZONE 'UTC'))`;
     const metrics = Prisma.sql`COUNT(*)::int orders,COUNT(*) FILTER(WHERE category='VALID')::int "validOrders",
+      COUNT(*) FILTER(WHERE category='RETURNED')::int returned,
+      COALESCE(ROUND(100.0 * COUNT(*) FILTER(WHERE category='RETURNED') / NULLIF(COUNT(*) FILTER(WHERE category IN ('VALID','RETURNED')),0),2),0)::float8 "returnRate",
       COUNT(*) FILTER(WHERE category='CANCELLED')::int cancelled,COUNT(*) FILTER(WHERE category='DRAFT')::int draft,
       COUNT(*) FILTER(WHERE category='UNKNOWN')::int unclassified,
       COALESCE(SUM(total) FILTER(WHERE category='VALID'),0)::text sales,
@@ -79,8 +82,8 @@ export class SalesReports {
       COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingActual" IS NULL)::int "shippingUnknown",
       COUNT(*) FILTER(WHERE category='VALID' AND "shippingCharged" IS NULL)::int "shippingChargedUnknown",
       COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingEstimated" IS NOT NULL)::int "shippingEstimatedOrders",
-      COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingActual" IS NOT NULL AND (category='CANCELLED' OR (category='VALID' AND "shippingCharged" IS NOT NULL)))::int "shippingComparedOrders",
-      COALESCE(SUM((CASE WHEN category='VALID' THEN "shippingCharged" ELSE 0 END)-"shippingActual") FILTER(WHERE "shippingActual" IS NOT NULL AND (category='CANCELLED' OR (category='VALID' AND "shippingCharged" IS NOT NULL))),0)::text "shippingDifference"`;
+      COUNT(*) FILTER(WHERE category<>'DRAFT' AND "shippingActual" IS NOT NULL AND (category IN ('CANCELLED','RETURNED') OR (category='VALID' AND "shippingCharged" IS NOT NULL)))::int "shippingComparedOrders",
+      COALESCE(SUM((CASE WHEN category='VALID' THEN "shippingCharged" ELSE 0 END)-"shippingActual") FILTER(WHERE "shippingActual" IS NOT NULL AND (category IN ('CANCELLED','RETURNED') OR (category='VALID' AND "shippingCharged" IS NOT NULL))),0)::text "shippingDifference"`;
     return this.db.$transaction(
       async (tx) => {
         const summary = await tx.$queryRaw<any[]>(

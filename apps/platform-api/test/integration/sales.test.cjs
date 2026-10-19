@@ -619,6 +619,161 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
   );
 });
 
+test('Hàng hoàn: chuyển trạng thái có lý do, giữ tiền và báo cáo đúng phạm vi', async () => {
+  const owner = await db.user.create({ data: {
+    email: 'return-owner@test.local', displayName: 'Return owner', passwordHash: admin.passwordHash,
+    mustChangePassword: false, roleAssignments: { create: { roleId: regionalRole.id } },
+  } });
+  const outsider = await db.user.create({ data: {
+    email: 'return-outsider@test.local', displayName: 'Return outsider', passwordHash: admin.passwordHash,
+    mustChangePassword: false, roleAssignments: { create: { roleId: regionalRole.id } },
+  } });
+  const jwt = await mint(owner.id), other = await mint(outsider.id);
+  const customer = await db.customer.create({ data: {
+    name: 'Return customer', createdById: admin.id,
+    assignments: { create: { userId: owner.id, assignedById: admin.id, reason: 'Return fixture' } },
+  } });
+  const create = (status) => db.order.create({ data: {
+    customerId: customer.id, createdById: owner.id, closedByUserId: owner.id,
+    closedAt: new Date('2025-08-10T03:00:00Z'),
+    requestKey: randomUUID(), requestHash: 'return-fixture', status,
+    recipientName: 'Return test', recipientPhone: '', shippingAddress: 'Test',
+    subtotal: 1000, total: 1100, discount: 0, shippingFee: 100, shippingCost: 50,
+    paidAmount: 500, paymentStatus: 'PARTIAL', createdAt: new Date('2025-08-10T03:00:00Z'),
+  } });
+  const completed = await create('COMPLETED'), confirmed = await create('CONFIRMED');
+  const slip = await db.deliverySlip.create({ data: {
+    orderId: completed.id, createdById: owner.id, snapshot: {},
+  } });
+  const draft = await create('DRAFT'), cancelled = await create('CANCELLED');
+  await create('CONFIRMED');
+  const patch = (order, body, token = jwt) => http().patch('/api/v1/sales/orders/' + order.id + '/status')
+    .set('Authorization', 'Bearer ' + token).send({ version: order.version, status: 'RETURNED', reason: 'Khách trả hàng', ...body });
+  await patch(completed, {}, other).expect(404);
+  await patch(completed, { reason: ' ' }).expect(400);
+  await patch(draft, {}).expect(400);
+  await patch(cancelled, {}).expect(400);
+  const returned = (await patch(completed, {}).expect(200)).body;
+  await patch(confirmed, {}).expect(200);
+  assert.equal(returned.status, 'RETURNED');
+  assert.equal(returned.paidAmount, '500');
+  assert.equal(returned.paymentStatus, 'PARTIAL');
+  assert.equal(returned.closedByUserId, owner.id);
+  assert.ok((await db.deliverySlip.findUniqueOrThrow({ where: { id: slip.id } })).voidedAt);
+  await patch(completed, {}).expect(409);
+  await patch({ ...completed, version: returned.version }, { status: 'COMPLETED' }).expect(400);
+  assert.equal(await db.orderHistory.count({ where: { orderId: completed.id, action: 'status_changed' } }), 1);
+  assert.equal(await db.auditLog.count({ where: { entityId: completed.id, action: 'order.status_changed' } }), 1);
+  await db.historicalOrder.create({ data: {
+    externalId: 'return-historical', number: 'RETURN-SAPO', customerId: customer.id,
+    sourceStatus: 'Hàng hoàn', sourcePaymentStatus: '', sourceShippingStatus: '',
+    sourceClosedBy: 'Return test',
+    orderedAt: new Date('2025-08-10T04:00:00Z'), recipientName: 'Test', recipientPhone: '',
+    shippingAddress: 'Test', total: 2000, paidAmount: 0, items: [],
+  } });
+  const getReport = async (source = 'ALL', token = jwt) => (await http()
+    .get('/api/v1/sales/reports?from=2025-08-10&to=2025-08-10&source=' + source)
+    .set('Authorization', 'Bearer ' + token).expect(200)).body;
+  const report = await getReport();
+  assert.equal(report.summary.orders, 6);
+  assert.equal(report.summary.returned, 3);
+  assert.equal(report.summary.returnRate, 75);
+  assert.equal(report.summary.sales, '1100');
+  assert.equal(report.summary.paid, '500');
+  assert.equal(report.summary.shippingDifference, '-100');
+  assert.equal(report.summary.shippingComparedOrders, 4);
+  assert.equal(report.timeline[0].returned, 3);
+  assert.equal(report.comparison.at(-1).returnRate, 75);
+  assert.equal(report.comparison[0].returnRate, 0);
+  assert.equal(report.previous.returnRate, 0);
+  assert.equal((await getReport('SAKURA')).summary.returnRate, 66.67);
+  assert.equal((await getReport('SAPO')).summary.returnRate, 100);
+  const hidden = await getReport('ALL', other);
+  assert.equal(hidden.summary.returned, 0);
+  assert.equal(hidden.summary.returnRate, 0);
+  const feed = (await http().get('/api/v1/sales/order-feed?status=SAKURA:RETURNED')
+    .set('Authorization', 'Bearer ' + jwt).expect(200)).body;
+  assert.equal(feed.total, 2);
+});
+
+test('Task tags: shared visibility, collaborator progress, followers, removal and version checks', async () => {
+  const makeUser = (email, roleId = regionalRole.id, status = 'ACTIVE') => db.user.create({ data: {
+    email: email + '@task-tags.test', displayName: email, passwordHash: admin.passwordHash,
+    status, mustChangePassword: false, roleAssignments: { create: { roleId } },
+  } });
+  const owner = await makeUser('owner'), collaborator = await makeUser('collaborator');
+  const follower = await makeUser('follower'), stranger = await makeUser('stranger');
+  const disabled = await makeUser('disabled', regionalRole.id, 'DISABLED');
+  const readPermission = await db.permission.findUniqueOrThrow({ where: { code: 'sales.tasks.read' } });
+  const readRole = await db.role.create({ data: { code: 'task-observer', name: 'Task observer',
+    permissions: { create: { permissionId: readPermission.id, scope: 'ASSIGNED' } } } });
+  const viewer = await makeUser('viewer', readRole.id);
+  const tokens = new Map();
+  for (const user of [owner, collaborator, follower, stranger, viewer]) tokens.set(user.id, await mint(user.id));
+  const req = (user, method, path, body) => {
+    const r = http()[method]('/api/v1' + path).set('Authorization', 'Bearer ' + tokens.get(user.id));
+    return body === undefined ? r : r.send(body);
+  };
+  const customer = await db.customer.create({ data: { name: 'Private task customer', createdById: owner.id,
+    assignments: { create: { userId: owner.id, assignedById: admin.id, reason: 'Task test' } } } });
+  const people = (await req(owner, 'get', '/sales/tasks/people').expect(200)).body;
+  assert.ok(people.some(p => p.id === collaborator.id && p.canCollaborate));
+  assert.ok(people.some(p => p.id === viewer.id && !p.canCollaborate));
+  assert.ok(!people.some(p => p.id === disabled.id));
+  assert.ok(people.every(p => !('email' in p) && !('passwordHash' in p)));
+  const base = { title: 'Task collaboration needle', note: 'Shared work details', customerId: customer.id,
+    dueDate: new Date().toISOString(), collaboratorIds: [collaborator.id], followerIds: [follower.id, viewer.id] };
+  await req(owner, 'post', '/sales/tasks', { ...base, collaboratorIds: [owner.id] }).expect(400);
+  await req(owner, 'post', '/sales/tasks', { ...base, followerIds: [collaborator.id] }).expect(400);
+  await req(owner, 'post', '/sales/tasks', { ...base, collaboratorIds: [disabled.id] }).expect(400);
+  await req(owner, 'post', '/sales/tasks', { ...base, collaboratorIds: [viewer.id] }).expect(400);
+  await req(owner, 'post', '/sales/tasks', { ...base, followerIds: null }).expect(400);
+  await req(owner, 'post', '/sales/tasks', { ...base, collaboratorIds: [collaborator.id, collaborator.id] }).expect(400);
+  await req(owner, 'post', '/sales/tasks', { ...base, collaboratorIds: [randomUUID()] }).expect(400);
+  let task = (await req(owner, 'post', '/sales/tasks', base).expect(201)).body;
+  assert.equal(task.participants.length, 3);
+  assert.equal(task.canManage, true);
+  await req(stranger, 'post', '/sales/tasks', { title: 'Unrelated needle' }).expect(201);
+  for (const user of [owner, collaborator, follower, viewer]) {
+    const list = (await req(user, 'get', '/sales/tasks?search=needle&pageSize=1').expect(200)).body;
+    assert.equal(list.total, 1); assert.equal(list.items[0].id, task.id);
+    assert.equal(list.items[0].canManage, user.id === owner.id);
+    assert.equal(list.items[0].canUpdateStatus, [owner.id, collaborator.id].includes(user.id));
+    const today = (await req(user, 'get', '/sales/tasks/today').expect(200)).body;
+    assert.ok([...today.overdue, ...today.due].some(t => t.id === task.id));
+  }
+  await req(collaborator, 'get', '/sales/customers/' + customer.id).expect(404);
+  await req(follower, 'get', '/sales/customers/' + customer.id).expect(404);
+  const url = '/sales/tasks/' + task.id;
+  await req(follower, 'patch', url, { version: task.version, status: 'DONE' }).expect(403);
+  await req(viewer, 'patch', url, { version: task.version, status: 'DONE' }).expect(403);
+  await req(stranger, 'patch', url, { version: task.version, status: 'DONE' }).expect(403);
+  await req(collaborator, 'patch', url, { version: task.version, status: 'DONE', title: 'Take over' }).expect(403);
+  await req(collaborator, 'patch', url, { version: task.version, followerIds: [] }).expect(403);
+  await req(collaborator, 'delete', url).expect(400);
+  const oldVersion = task.version;
+  task = (await req(collaborator, 'patch', url, { version: task.version, status: 'IN_PROGRESS' }).expect(200)).body;
+  await req(owner, 'patch', url, { version: oldVersion, collaboratorIds: [] }).expect(409);
+  task = (await req(owner, 'patch', url, { version: task.version, followerIds: [] }).expect(200)).body;
+  assert.equal(task.participants.length, 1);
+  assert.equal((await req(follower, 'get', '/sales/tasks?search=needle').expect(200)).body.total, 0);
+  task = (await req(collaborator, 'patch', url, { version: task.version, status: 'DONE' }).expect(200)).body;
+  assert.ok(task.completedAt);
+  task = (await req(owner, 'patch', url, { version: task.version, collaboratorIds: [] }).expect(200)).body;
+  await req(collaborator, 'patch', url, { version: task.version, status: 'TODO' }).expect(403);
+  assert.equal((await req(collaborator, 'get', '/sales/tasks?search=needle').expect(200)).body.total, 0);
+  const daily = (await req(owner, 'post', '/sales/tasks', { title: 'Shared daily checklist', isRecurring: true,
+    collaboratorIds: [collaborator.id], followerIds: [follower.id] }).expect(201)).body;
+  const dailyUrl = '/sales/tasks/' + daily.id;
+  assert.ok((await req(follower, 'get', '/sales/tasks/daily').expect(200)).body.some(t => t.id === daily.id && !t.canUpdateStatus));
+  await req(collaborator, 'patch', dailyUrl, { version: daily.version, status: 'DONE' }).expect(200);
+  assert.ok((await req(owner, 'get', '/sales/tasks/daily').expect(200)).body.find(t => t.id === daily.id).doneToday);
+  assert.ok((await req(follower, 'get', '/sales/tasks/daily').expect(200)).body.find(t => t.id === daily.id).doneToday);
+  await req(owner, 'delete', dailyUrl).expect(200);
+  assert.equal(await db.salesTaskParticipant.count({ where: { taskId: daily.id } }), 0);
+  assert.equal(await db.auditLog.count({ where: { entityId: task.id, action: 'task.participants_updated' } }), 2);
+});
+
 test('VNPost: secure connection, scoped tracking, concurrency and shipping reports', async (t) => {
   const {VnpostGateway}=require('../../dist/shipping/vnpost');
   const {ShippingService}=require('../../dist/shipping/shipping');

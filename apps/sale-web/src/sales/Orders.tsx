@@ -316,6 +316,11 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
                     Hủy đơn
                   </button>
                 )}
+                {['CONFIRMED', 'COMPLETED'].includes(order.status) && (
+                  <button className="secondary" onClick={() => setAction('RETURNED')}>
+                    Đánh dấu hàng hoàn
+                  </button>
+                )}
               </div>
             )}
           </section>
@@ -327,7 +332,10 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
                 <strong>{h.actor.displayName}</strong>
                 <small>{date(h.createdAt)}</small>
                 <p>
-                  {h.note.replace(/DRAFT|CONFIRMED|COMPLETED|CANCELLED/g, (s) => orderStatuses[s])}
+                  {h.note.replace(
+                    /DRAFT|CONFIRMED|COMPLETED|CANCELLED|RETURNED/g,
+                    (s) => orderStatuses[s],
+                  )}
                 </p>
               </div>
             ))}
@@ -384,14 +392,20 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
                         ? 'Bạn sẽ được ghi nhận là người chốt đơn này.'
                         : action === 'CANCELLED'
                           ? 'Đơn hủy không thể mở lại. Đơn đã thu tiền cần xử lý hoàn tiền trước.'
-                          : 'Xác nhận việc xử lý đơn đã hoàn tất. Trạng thái thu tiền được quản lý riêng.'}
+                          : action === 'RETURNED'
+                            ? 'Ghi nhận hàng hoàn toàn bộ, loại khỏi doanh số. Số tiền đã thu được giữ nguyên; thao tác này không thực hiện hoàn tiền.'
+                            : 'Xác nhận việc xử lý đơn đã hoàn tất. Trạng thái thu tiền được quản lý riêng.'}
                     </p>
                     <label>
-                      {action === 'CANCELLED' ? 'Lý do hủy' : 'Ghi chú (tùy chọn)'}
+                      {action === 'CANCELLED'
+                        ? 'Lý do hủy'
+                        : action === 'RETURNED'
+                          ? 'Lý do hoàn hàng'
+                          : 'Ghi chú (tùy chọn)'}
                       <textarea
                         name="reason"
-                        required={action === 'CANCELLED'}
-                        minLength={action === 'CANCELLED' ? 3 : undefined}
+                        required={['CANCELLED', 'RETURNED'].includes(action)}
+                        minLength={['CANCELLED', 'RETURNED'].includes(action) ? 3 : undefined}
                         maxLength={1000}
                       />
                     </label>
@@ -496,13 +510,20 @@ export function Orders({ actor }: { actor: Actor }) {
             )}
             {source !== 'SAKURA' && (
               <optgroup label="Sapo">
-                {['Đang giao dịch', 'Đã hoàn thành', 'Đã hủy', 'Đã lưu trữ', 'Đặt hàng'].map(
-                  (v) => (
-                    <option key={v} value={'SAPO:' + v}>
-                      {v}
-                    </option>
-                  ),
-                )}
+                {[
+                  'Đang giao dịch',
+                  'Đã hoàn thành',
+                  'Đã hủy',
+                  'Hàng hoàn',
+                  'Đã hoàn hàng',
+                  'Trả hàng',
+                  'Đã lưu trữ',
+                  'Đặt hàng',
+                ].map((v) => (
+                  <option key={v} value={'SAPO:' + v}>
+                    {v}
+                  </option>
+                ))}
               </optgroup>
             )}
           </select>

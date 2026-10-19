@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Prisma } from '@sakura/database';
 import { Database } from '../db';
@@ -13,7 +14,28 @@ const person = { id: true, displayName: true };
 const taskInclude = {
   user: { select: person },
   customer: { select: { id: true, name: true } },
+  participants: {
+    select: { userId: true, role: true, user: { select: person } },
+    orderBy: { userId: 'asc' as const },
+  },
 } satisfies Prisma.SalesTaskInclude;
+
+const eligiblePeople: Prisma.UserWhereInput = {
+  status: 'ACTIVE',
+  roleAssignments: {
+    some: {
+      role: {
+        permissions: {
+          some: {
+            permission: { code: 'sales.tasks.read' },
+            scope: { in: ['ASSIGNED', 'GLOBAL'] },
+          },
+        },
+      },
+    },
+  },
+};
+type IncludedTask = Prisma.SalesTaskGetPayload<{ include: typeof taskInclude }>;
 
 @Injectable()
 export class TasksService {
@@ -21,6 +43,100 @@ export class TasksService {
 
   private transaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) {
     return this.db.$transaction(fn, { isolationLevel: 'Serializable', timeout: 15000 });
+  }
+
+  private sharedScope(actor: Principal): Prisma.SalesTaskWhereInput {
+    return { OR: [{ userId: actor.id }, { participants: { some: { userId: actor.id } } }] };
+  }
+
+  private present(task: IncludedTask, actor: Principal) {
+    const canManage =
+      hasPermission(actor.grants, 'sales.tasks.manage', 'ASSIGNED') &&
+      (task.userId === actor.id || hasPermission(actor.grants, 'sales.tasks.manage', 'GLOBAL'));
+    const collaborator = task.participants.some(
+      (p) => p.userId === actor.id && p.role === 'COLLABORATOR',
+    );
+    return {
+      ...task,
+      canManage,
+      canUpdateStatus:
+        canManage ||
+        (collaborator && hasPermission(actor.grants, 'sales.tasks.manage', 'ASSIGNED')),
+    };
+  }
+
+  async people(actor: Principal) {
+    const users = await this.db.user.findMany({
+      where: eligiblePeople,
+      select: {
+        ...person,
+        roleAssignments: {
+          select: {
+            role: {
+              select: {
+                permissions: { select: { scope: true, permission: { select: { code: true } } } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
+    });
+    return users.map((u) => ({
+      id: u.id,
+      displayName: u.displayName,
+      isSelf: u.id === actor.id,
+      canCollaborate: u.roleAssignments.some((a) =>
+        a.role.permissions.some(
+          (p) =>
+            p.permission.code === 'sales.tasks.manage' && ['ASSIGNED', 'GLOBAL'].includes(p.scope),
+        ),
+      ),
+    }));
+  }
+
+  private async validatePeople(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    collaborators: string[],
+    followers: string[],
+  ) {
+    const ids = [...collaborators, ...followers];
+    if (ids.includes(ownerId) || new Set(ids).size !== ids.length)
+      throw new BadRequestException(
+        'Mỗi nhân sự chỉ thuộc một nhóm; người chủ trì không cần gắn thẻ.',
+      );
+    const users = await tx.user.findMany({
+      where: { AND: [eligiblePeople, { id: { in: ids } }] },
+      select: { id: true },
+    });
+    if (users.length !== ids.length)
+      throw new BadRequestException(
+        'Nhân sự được gắn thẻ phải đang hoạt động và có quyền xem công việc.',
+      );
+    const managers = await tx.user.count({
+      where: {
+        id: { in: collaborators },
+        roleAssignments: {
+          some: {
+            role: {
+              permissions: {
+                some: {
+                  permission: { code: 'sales.tasks.manage' },
+                  scope: { in: ['ASSIGNED', 'GLOBAL'] },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (managers !== collaborators.length)
+      throw new BadRequestException('Người cùng triển khai cần có quyền cập nhật công việc.');
+    return [
+      ...collaborators.map((userId) => ({ userId, role: 'COLLABORATOR' as const })),
+      ...followers.map((userId) => ({ userId, role: 'FOLLOWER' as const })),
+    ];
   }
 
   async list(actor: Principal, query: TaskQuery) {
@@ -68,12 +184,11 @@ export class TasksService {
       : {};
 
     const where: Prisma.SalesTaskWhereInput = {
-      ...(isGlobal ? {} : { userId: actor.id }),
+      AND: [isGlobal ? {} : this.sharedScope(actor), searchFilter],
       ...(query.isRecurring !== undefined ? { isRecurring: query.isRecurring } : {}),
       ...statusFilter,
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(dueDateFilter ? { dueDate: dueDateFilter } : {}),
-      ...searchFilter,
     };
 
     const [items, total] = await this.db.$transaction(
@@ -90,7 +205,12 @@ export class TasksService {
       { isolationLevel: 'RepeatableRead' },
     );
 
-    return { items, total, page: query.page, pageSize: query.pageSize };
+    return {
+      items: items.map((t) => this.present(t, actor)),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
   }
 
   async dailyChecklist(actor: Principal) {
@@ -101,7 +221,7 @@ export class TasksService {
 
     const tasks = await this.db.salesTask.findMany({
       where: {
-        userId: actor.id,
+        ...this.sharedScope(actor),
         isRecurring: true,
       },
       include: taskInclude,
@@ -115,7 +235,7 @@ export class TasksService {
         t.completedAt <= endOfToday
       );
       return {
-        ...t,
+        ...this.present(t, actor),
         doneToday,
         status: doneToday ? ('DONE' as const) : ('TODO' as const),
       };
@@ -130,7 +250,7 @@ export class TasksService {
 
     const items = await this.db.salesTask.findMany({
       where: {
-        userId: actor.id,
+        AND: [this.sharedScope(actor)],
         isRecurring: false,
         OR: [
           { dueDate: { lte: endOfToday }, status: { in: ['TODO', 'IN_PROGRESS'] } },
@@ -141,13 +261,13 @@ export class TasksService {
       orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }],
     });
 
-    const overdue: typeof items = [];
-    const due: typeof items = [];
-    const completed: typeof items = [];
+    const overdue: ReturnType<TasksService['present']>[] = [];
+    const due: typeof overdue = [];
+    const completed: typeof overdue = [];
     for (const t of items) {
-      if (t.status === 'DONE') completed.push(t);
-      else if (t.dueDate && t.dueDate < startOfToday) overdue.push(t);
-      else due.push(t);
+      if (t.status === 'DONE') completed.push(this.present(t, actor));
+      else if (t.dueDate && t.dueDate < startOfToday) overdue.push(this.present(t, actor));
+      else due.push(this.present(t, actor));
     }
     return { overdue, due, completed };
   }
@@ -162,7 +282,13 @@ export class TasksService {
         if (!customer) throw new NotFoundException('Không tìm thấy khách trong phạm vi của bạn.');
       }
 
-      return tx.salesTask.create({
+      const participants = await this.validatePeople(
+        tx,
+        actor.id,
+        dto.collaboratorIds || [],
+        dto.followerIds || [],
+      );
+      const task = await tx.salesTask.create({
         data: {
           title: dto.title,
           userId: actor.id,
@@ -172,25 +298,58 @@ export class TasksService {
           priority: dto.priority || 'NORMAL',
           contactChannel: dto.contactChannel || '',
           isRecurring: dto.isRecurring || false,
+          participants: { create: participants },
         },
         include: taskInclude,
       });
+      return this.present(task, actor);
     });
   }
 
   async update(actor: Principal, id: string, dto: UpdateTaskDto) {
     return this.transaction(async (tx) => {
-      const task = await tx.salesTask.findUnique({ where: { id } });
+      const task = await tx.salesTask.findUnique({ where: { id }, include: taskInclude });
       if (!task) throw new NotFoundException('Không tìm thấy công việc.');
 
       const isGlobal = hasPermission(actor.grants, 'sales.tasks.manage', 'GLOBAL');
       if (task.userId !== actor.id && !isGlobal) {
-        throw new BadRequestException('Bạn không có quyền cập nhật công việc này.');
+        const collaborator = task.participants.some(
+          (p) => p.userId === actor.id && p.role === 'COLLABORATOR',
+        );
+        if (
+          !collaborator ||
+          dto.status === undefined ||
+          Object.entries(dto).some(
+            ([k, v]) => v !== undefined && !['version', 'status'].includes(k),
+          )
+        )
+          throw new ForbiddenException(
+            'Chỉ người cùng triển khai được cập nhật tiến độ; nội dung và nhân sự do người chủ trì quản lý.',
+          );
       }
 
       checkVersion(task.version, dto.version);
 
       const data: Prisma.SalesTaskUpdateInput = { version: { increment: 1 } };
+      if (dto.collaboratorIds !== undefined || dto.followerIds !== undefined) {
+        const collaborators =
+          dto.collaboratorIds ??
+          task.participants.filter((p) => p.role === 'COLLABORATOR').map((p) => p.userId);
+        const followers =
+          dto.followerIds ??
+          task.participants.filter((p) => p.role === 'FOLLOWER').map((p) => p.userId);
+        const participants = await this.validatePeople(tx, task.userId, collaborators, followers);
+        data.participants = { deleteMany: {}, create: participants };
+        await tx.auditLog.create({
+          data: {
+            actorId: actor.id,
+            action: 'task.participants_updated',
+            entity: 'SalesTask',
+            entityId: id,
+            metadata: { collaboratorIds: collaborators, followerIds: followers },
+          },
+        });
+      }
       if (dto.title !== undefined) data.title = dto.title;
       if (dto.note !== undefined) data.note = dto.note;
       if (dto.dueDate !== undefined) data.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
@@ -217,11 +376,12 @@ export class TasksService {
         }
       }
 
-      return tx.salesTask.update({
+      const updated = await tx.salesTask.update({
         where: { id },
         data,
         include: taskInclude,
       });
+      return this.present(updated, actor);
     });
   }
 

@@ -47,6 +47,7 @@ model User {
   chatReads          ChatRead[]
   deliverySlips      DeliverySlip[]
   salesTasks         SalesTask[]
+  taskParticipations SalesTaskParticipant[]
 }
 
 model Session {
@@ -184,6 +185,7 @@ enum OrderStatus {
   CONFIRMED
   COMPLETED
   CANCELLED
+  RETURNED
 }
 
 enum PaymentStatus {
@@ -234,11 +236,28 @@ model SalesTask {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   version        Int          @default(1)
+  participants   SalesTaskParticipant[]
 
   @@index([userId, status, dueDate])
   @@index([userId, customerId])
   @@index([dueDate, status])
   @@index([userId, isRecurring])
+}
+
+enum TaskParticipantRole {
+  COLLABORATOR
+  FOLLOWER
+}
+
+model SalesTaskParticipant {
+  taskId String @db.Uuid
+  userId String @db.Uuid
+  role TaskParticipantRole
+  task SalesTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId, role])
 }
 
 model Customer {

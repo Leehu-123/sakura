@@ -5,6 +5,8 @@ export type MonthMetrics = {
   paid: string;
   validOrders: number;
   cancelled: number;
+  returned: number;
+  returnRate: number;
   shippingCharged: string;
   shippingActual: string;
   shippingUnknown: number;
@@ -123,6 +125,12 @@ export function MonthlyComparison({
               <th>Tháng</th>
               <th>{names[0]}</th>
               <th>{names[1]}</th>
+              {metric === 'orders' && (
+                <>
+                  <th>Đơn hoàn</th>
+                  <th>Tỷ lệ hoàn hàng</th>
+                </>
+              )}
               <th>
                 {metric === 'sales'
                   ? 'Doanh số so tháng trước'
@@ -149,6 +157,17 @@ export function MonthlyComparison({
                   {format(r[keys[1]])}
                   {metric !== 'orders' && ' ₫'}
                 </td>
+                {metric === 'orders' && (
+                  <>
+                    <td>{format(r.returned)}</td>
+                    <td>
+                      {new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(
+                        r.returnRate,
+                      )}
+                      %
+                    </td>
+                  </>
+                )}
                 <td>
                   {metric === 'shipping'
                     ? r.shippingUnknown

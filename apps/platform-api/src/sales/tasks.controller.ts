@@ -21,6 +21,13 @@ import { CreateTaskDto, UpdateTaskDto, TaskQuery } from './tasks.dto';
 export class TasksController {
   constructor(private readonly tasks: TasksService) {}
 
+  @Get('people')
+  @RequirePermission('sales.tasks.manage', 'ASSIGNED')
+  @ApiOperation({ summary: 'Nhân sự có thể gắn thẻ vào công việc' })
+  people(@CurrentUser() actor: Principal) {
+    return this.tasks.people(actor);
+  }
+
   @Get()
   @RequirePermission('sales.tasks.read', 'ASSIGNED')
   @ApiOperation({ summary: 'Danh sách công việc' })

@@ -147,7 +147,7 @@ export class SalesController {
   }
   @Patch('orders/:id/status')
   @RequirePermission('sales.orders.manage', 'ASSIGNED')
-  @ApiOperation({ summary: 'Chốt, hoàn tất hoặc hủy đơn' })
+  @ApiOperation({ summary: 'Chốt, hoàn tất, hoàn hàng hoặc hủy đơn' })
   status(
     @CurrentUser() actor: Principal,
     @Param('id', ParseUUIDPipe) id: string,

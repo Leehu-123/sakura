@@ -3,6 +3,7 @@ import { BarChart3, Download, RefreshCw, ArrowRight } from 'lucide-react';
 import { useResource, State } from './shared';
 import { MonthlyComparison, MonthMetrics } from './MonthlyComparison';
 import { ReportAiPanel } from './ReportAiSettings';
+import { orderStatuses } from './types';
 type Metrics = {
   shippingCharged: string;
   shippingEstimated: string;
@@ -15,6 +16,8 @@ type Metrics = {
   orders: number;
   validOrders: number;
   cancelled: number;
+  returned: number;
+  returnRate: number;
   draft: number;
   unclassified: number;
   sales: string;
@@ -43,26 +46,42 @@ type Report = {
 };
 const integer = (v: string | number) => new Intl.NumberFormat('vi-VN').format(BigInt(v));
 const money = (v: string) => integer(v) + ' ₫';
+const percent = (v: number) =>
+  new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(v) + '%';
 const localDay = (d = new Date()) => new Date(d.getTime() + 7 * 3600000).toISOString().slice(0, 10);
 const sourceName = (s: string) =>
   s === 'ALL' ? 'Tất cả nguồn' : s === 'SAPO' ? 'Sapo đã nhập' : 'Sakura';
 function exportReport(d: Report) {
   const rows = [
     ['Báo cáo Sakura', d.from, d.to, sourceName(d.source)],
+    ['Số đơn hoàn', d.summary.returned, 'Tỷ lệ hoàn hàng (%)', d.summary.returnRate],
+    ['Tỷ lệ hoàn = đơn hoàn / (đơn hợp lệ + đơn hoàn) × 100; kỳ theo ngày tạo/đặt đơn'],
     [
       'Theo ngày/tháng',
       'Đơn hợp lệ',
+      'Đơn hoàn',
+      'Tỷ lệ hoàn hàng (%)',
       'Doanh số (VND)',
       'Đã thu (VND)',
       'Còn phải thu đã biết (VND)',
     ],
-    ...d.timeline.map((r) => [r.label, r.validOrders, r.sales, r.paid, r.unpaid]),
+    ...d.timeline.map((r) => [
+      r.label,
+      r.validOrders,
+      r.returned,
+      r.returnRate,
+      r.sales,
+      r.paid,
+      r.unpaid,
+    ]),
     [],
     ['So sánh tháng', d.comparisonFrom || '', d.comparisonTo || ''],
     [
       'Tháng',
       'Đơn hợp lệ',
       'Đơn hủy',
+      'Đơn hoàn',
+      'Tỷ lệ hoàn hàng (%)',
       'Doanh số (VND)',
       'Đã thu (VND)',
       'Phí thu khách (VND)',
@@ -73,6 +92,8 @@ function exportReport(d: Report) {
       r.label,
       r.validOrders,
       r.cancelled,
+      r.returned,
+      r.returnRate,
       r.sales,
       r.paid,
       r.shippingCharged,
@@ -80,8 +101,15 @@ function exportReport(d: Report) {
       r.shippingUnknown,
     ]),
     [],
-    ['Nguồn', 'Người chốt', 'Đơn hợp lệ', 'Doanh số (VND)'],
-    ...d.staff.map((r) => [r.source || '', r.label, r.validOrders, r.sales]),
+    ['Nguồn', 'Người chốt', 'Đơn hợp lệ', 'Đơn hoàn', 'Tỷ lệ hoàn hàng (%)', 'Doanh số (VND)'],
+    ...d.staff.map((r) => [
+      r.source || '',
+      r.label,
+      r.validOrders,
+      r.returned,
+      r.returnRate,
+      r.sales,
+    ]),
     [],
     ['Nguồn', 'Trạng thái', 'Số đơn', 'Giá trị đơn (VND)'],
     ...d.statuses.map((r) => [r.source, r.label, r.orders, r.value]),
@@ -269,6 +297,12 @@ export function SalesReport({
               ],
               ['Khách mua hàng', integer(d.summary.customers), 'Khách đã liên kết với đơn hợp lệ'],
               ['Đơn đã hủy', integer(d.summary.cancelled), 'Không tính vào doanh số'],
+              ['Số đơn hoàn', integer(d.summary.returned), 'Hàng hoàn · không tính vào doanh số'],
+              [
+                'Tỷ lệ hoàn hàng',
+                percent(d.summary.returnRate),
+                'Đơn hoàn / (đơn hợp lệ + đơn hoàn) × 100',
+              ],
             ].map(([label, value, note]) => (
               <section className="panel business-kpi" key={label}>
                 <span>{label}</span>
@@ -354,9 +388,9 @@ export function SalesReport({
             <p className="muted">
               Tính theo ngày tạo/đặt đơn đã chọn, không phải ngày thanh toán cho hãng. Cước API là
               tạm tính có VAT; phí thực trả do người có quyền ghi nhận theo đối soát. Chênh lệch
-              loại đơn nháp và chưa rõ trạng thái; đơn hủy tính phí thu khách bằng 0 nhưng vẫn trừ
-              phí thực trả. Đơn hoàn vẫn cần đối soát/điều chỉnh trạng thái bán hàng riêng. Đây
-              không phải báo cáo lợi nhuận.
+              loại đơn nháp và chưa rõ trạng thái; đơn hủy/hoàn tính phí thu khách bằng 0 nhưng vẫn
+              trừ phí thực trả. Trạng thái vận chuyển không tự đổi trạng thái bán hàng sang Hàng
+              hoàn. Đây không phải báo cáo lợi nhuận.
             </p>
           </section>
           <section className="panel report-chart">
@@ -423,7 +457,9 @@ export function SalesReport({
                       {d.statuses.map((r) => (
                         <tr key={r.source + r.label}>
                           <td>{sourceName(r.source)}</td>
-                          <td>{r.label}</td>
+                          <td>
+                            {r.source === 'SAKURA' ? orderStatuses[r.label] || r.label : r.label}
+                          </td>
                           <td>{r.orders}</td>
                           <td>{money(r.value)}</td>
                           <td>
@@ -443,10 +479,12 @@ export function SalesReport({
           )}
           <p className="muted report-method">
             Ngày theo giờ Việt Nam, dựa trên ngày tạo đơn Sakura/ngày đặt đơn Sapo. Doanh số là tổng
-            giá trị đơn đã chốt/hoàn tất, gồm phí giao hàng và đã trừ giảm giá; loại đơn nháp, hủy
-            và trạng thái chưa xác định. Số tiền đã thu là lũy kế hiện tại của các đơn trong kỳ,
-            không phải dòng tiền thu theo ngày. Chưa phải báo cáo lợi nhuận hoặc doanh thu kế toán
-            sau hoàn trả.
+            giá trị đơn đã chốt/hoàn tất, gồm phí giao hàng và đã trừ giảm giá; loại đơn nháp, hủy,
+            hoàn và trạng thái chưa xác định. Số tiền đã thu là lũy kế hiện tại của các đơn trong
+            kỳ, không phải dòng tiền thu theo ngày. Chưa phải báo cáo lợi nhuận hoặc doanh thu kế
+            toán sau hoàn trả. Tỷ lệ hoàn hàng = số đơn hoàn / (số đơn hợp lệ + số đơn hoàn) × 100,
+            bằng 0% khi chưa có đơn đủ điều kiện. Đơn được xếp kỳ theo ngày tạo/đặt đơn, không phải
+            ngày nhận hàng hoàn.
           </p>
         </>
       )}
@@ -461,6 +499,8 @@ function MetricsTable({ rows }: { rows: Row[] }) {
           <tr>
             <th>Nhóm</th>
             <th>Đơn hợp lệ</th>
+            <th>Đơn hoàn</th>
+            <th>Tỷ lệ hoàn hàng</th>
             <th>Doanh số</th>
             <th>Đã thu</th>
             <th>Còn phải thu</th>
@@ -471,6 +511,8 @@ function MetricsTable({ rows }: { rows: Row[] }) {
             <tr key={r.label + i}>
               <td>{r.label}</td>
               <td>{r.validOrders}</td>
+              <td>{r.returned}</td>
+              <td>{percent(r.returnRate)}</td>
               <td>{money(r.sales)}</td>
               <td>{money(r.paid)}</td>
               <td>{money(r.unpaid)}</td>

@@ -101,6 +101,7 @@ export const orderStatuses: Record<string, string> = {
   CONFIRMED: 'Đã chốt',
   COMPLETED: 'Hoàn tất',
   CANCELLED: 'Đã hủy',
+  RETURNED: 'Hàng hoàn',
 };
 export const paymentStatuses: Record<string, string> = {
   UNPAID: 'Chưa thu',

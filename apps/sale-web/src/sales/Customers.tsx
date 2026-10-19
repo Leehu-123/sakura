@@ -422,6 +422,7 @@ function Handoff({
 }
 export function Customers({ actor, initialId }: { actor: Actor; initialId?: string | null }) {
   const [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(20),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState(''),
     [selected, setSelected] = useState<string | null>(initialId || null),
@@ -430,6 +431,8 @@ export function Customers({ actor, initialId }: { actor: Actor; initialId?: stri
   const result = useResource<Page<Customer>>(
     '/sales/customers?page=' +
       page +
+      '&pageSize=' +
+      pageSize +
       '&search=' +
       encodeURIComponent(search) +
       (status ? '&status=' + status : ''),
@@ -473,6 +476,22 @@ export function Customers({ actor, initialId }: { actor: Actor; initialId?: stri
             ))}
           </select>
         </label>
+        <label className="filter-label">
+          Hiển thị
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            {[10, 20, 50, 100].map((size) => (
+              <option key={size} value={size}>
+                {size} khách / trang
+              </option>
+            ))}
+          </select>
+        </label>
         {has(actor, 'sales.customers.manage') && (
           <button className="primary" onClick={() => setCreating(true)}>
             <Plus size={18} />
@@ -487,7 +506,20 @@ export function Customers({ actor, initialId }: { actor: Actor; initialId?: stri
       <State loading={result.loading} error={result.error} />
       {result.data && (
         <section className="panel">
-          <div className="table-scroll">
+          <div className="panel-head">
+            <h2>Danh sách khách hàng</h2>
+            <span className="muted" aria-live="polite">
+              {result.data.total
+                ? `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, result.data.total)} / ${result.data.total} khách hàng`
+                : '0 khách hàng'}
+            </span>
+          </div>
+          <div
+            className="table-scroll customer-list-scroll"
+            role="region"
+            aria-label="Danh sách khách hàng trong trang hiện tại"
+            tabIndex={0}
+          >
             <table>
               <thead>
                 <tr>

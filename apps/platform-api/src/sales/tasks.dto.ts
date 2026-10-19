@@ -10,6 +10,9 @@ import {
   ValidateIf,
   IsDateString,
   IsBoolean,
+  IsArray,
+  ArrayMaxSize,
+  ArrayUnique,
 } from 'class-validator';
 import { TaskStatus, TaskPriority } from '@sakura/database';
 import { PageDto } from '../core/dto';
@@ -17,7 +20,25 @@ import { PageDto } from '../core/dto';
 const optional = () =>
   ValidateIf((_o, value) => value !== undefined && value !== null && value !== '');
 
-export class CreateTaskDto {
+class TaskPeopleDto {
+  @ApiPropertyOptional({ type: [String] })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  collaboratorIds?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  followerIds?: string[];
+}
+
+export class CreateTaskDto extends TaskPeopleDto {
   @ApiProperty()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -33,12 +54,30 @@ export class CreateTaskDto {
 
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(4000) note?: string;
   @ApiPropertyOptional() @optional() @IsDateString() dueDate?: string;
-  @ApiPropertyOptional({ enum: TaskPriority }) @optional() @IsEnum(TaskPriority) priority?: TaskPriority;
+  @ApiPropertyOptional({ enum: TaskPriority })
+  @optional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(50) contactChannel?: string;
   @ApiPropertyOptional() @optional() @IsBoolean() isRecurring?: boolean;
 }
 
 export class UpdateTaskDto extends VersionDto {
+  @ApiPropertyOptional({ type: [String] })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  collaboratorIds?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @ValidateIf((_o, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  followerIds?: string[];
   @ApiPropertyOptional() @optional() @IsString() @MinLength(2) @MaxLength(200) title?: string;
 
   @ApiPropertyOptional()
@@ -49,7 +88,10 @@ export class UpdateTaskDto extends VersionDto {
 
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(4000) note?: string;
   @ApiPropertyOptional() @optional() @IsDateString() dueDate?: string;
-  @ApiPropertyOptional({ enum: TaskPriority }) @optional() @IsEnum(TaskPriority) priority?: TaskPriority;
+  @ApiPropertyOptional({ enum: TaskPriority })
+  @optional()
+  @IsEnum(TaskPriority)
+  priority?: TaskPriority;
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(50) contactChannel?: string;
   @ApiPropertyOptional({ enum: TaskStatus }) @optional() @IsEnum(TaskStatus) status?: TaskStatus;
   @ApiPropertyOptional() @optional() @IsBoolean() isRecurring?: boolean;

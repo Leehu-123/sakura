@@ -3184,3 +3184,30 @@ dialog::backdrop {
     flex-wrap: wrap;
   }
 }
+
+.task-people-fields {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  padding: 14px;
+  min-width: 0;
+}
+.task-people-fields legend { font-weight: 600; padding: 0 6px; }
+.task-people-options { max-height: 240px; overflow-y: auto; margin: 10px 0; }
+.task-person-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.task-person-option select { width: auto; max-width: 55%; }
+.task-people-summary { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 6px; }
+.task-people-summary .badge { white-space: normal; }
+
+.customer-list-scroll {
+  max-height: 60vh;
+  overflow: auto;
+}
+.customer-list-scroll th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.customer-list-scroll:focus-visible {
+  outline: 2px solid var(--primary, #db2777);
+  outline-offset: -2px;
+}

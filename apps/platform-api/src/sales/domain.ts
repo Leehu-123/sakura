@@ -35,9 +35,10 @@ export function checkTransition(
 ) {
   const allowed: Record<OrderStatus, OrderStatus[]> = {
     DRAFT: ['CONFIRMED', 'CANCELLED'],
-    CONFIRMED: ['COMPLETED', 'CANCELLED'],
-    COMPLETED: [],
+    CONFIRMED: ['COMPLETED', 'CANCELLED', 'RETURNED'],
+    COMPLETED: ['RETURNED'],
     CANCELLED: [],
+    RETURNED: [],
   };
   if (!allowed[from].includes(to))
     throw new BadRequestException('Không thể chuyển sang trạng thái này.');
@@ -47,4 +48,6 @@ export function checkTransition(
     );
   if (to === 'CANCELLED' && reason.trim().length < 3)
     throw new BadRequestException('Vui lòng ghi rõ lý do hủy đơn.');
+  if (to === 'RETURNED' && reason.trim().length < 3)
+    throw new BadRequestException('Vui lòng ghi rõ lý do hoàn hàng.');
 }

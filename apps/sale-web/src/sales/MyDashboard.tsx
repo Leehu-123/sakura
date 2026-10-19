@@ -20,6 +20,12 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Task } from './MyTasks';
+import {
+  TaskPeopleFields,
+  TaskPeopleSummary,
+  SharedTaskStatus,
+  taskPeopleBody,
+} from './TaskPeople';
 
 type DashboardData = {
   ordersThisMonth: number;
@@ -120,13 +126,10 @@ export function MyDashboard({
   };
 
   const dailyItems = dailyTasks.data || [];
-  const completedDailyCount = dailyItems.filter(
-    (t) => t.doneToday || t.status === 'DONE',
-  ).length;
+  const completedDailyCount = dailyItems.filter((t) => t.doneToday || t.status === 'DONE').length;
   const totalDailyCount = dailyItems.length;
-  const progressPercent = totalDailyCount > 0
-    ? Math.round((completedDailyCount / totalDailyCount) * 100)
-    : 0;
+  const progressPercent =
+    totalDailyCount > 0 ? Math.round((completedDailyCount / totalDailyCount) * 100) : 0;
 
   return (
     <div>
@@ -176,7 +179,9 @@ export function MyDashboard({
             className="care-alert-card care-alert--total"
             onClick={() => onCustomer && onCustomer('')}
           >
-            <span className="care-alert-icon"><Users size={20} /></span>
+            <span className="care-alert-icon">
+              <Users size={20} />
+            </span>
             <div>
               <small>Tổng khách quản lý</small>
               <strong>{careAlerts.data.totalManaged}</strong>
@@ -187,36 +192,48 @@ export function MyDashboard({
             onClick={() => setAlertModal('overdue')}
             disabled={!careAlerts.data.overdueCustomers}
           >
-            <span className="care-alert-icon"><AlertTriangle size={20} /></span>
+            <span className="care-alert-icon">
+              <AlertTriangle size={20} />
+            </span>
             <div>
               <small>Quá hạn chăm sóc</small>
               <strong>{careAlerts.data.overdueCustomers}</strong>
             </div>
-            {careAlerts.data.overdueCustomers > 0 && <ChevronRight size={16} className="care-alert-arrow" />}
+            {careAlerts.data.overdueCustomers > 0 && (
+              <ChevronRight size={16} className="care-alert-arrow" />
+            )}
           </button>
           <button
             className="care-alert-card care-alert--warning"
             onClick={() => setAlertModal('due-soon')}
             disabled={!careAlerts.data.dueSoonCustomers}
           >
-            <span className="care-alert-icon"><Clock size={20} /></span>
+            <span className="care-alert-icon">
+              <Clock size={20} />
+            </span>
             <div>
               <small>Sắp đến hạn</small>
               <strong>{careAlerts.data.dueSoonCustomers}</strong>
             </div>
-            {careAlerts.data.dueSoonCustomers > 0 && <ChevronRight size={16} className="care-alert-arrow" />}
+            {careAlerts.data.dueSoonCustomers > 0 && (
+              <ChevronRight size={16} className="care-alert-arrow" />
+            )}
           </button>
           <button
             className="care-alert-card care-alert--info"
             onClick={() => setAlertModal('unanswered')}
             disabled={!careAlerts.data.unansweredConversations}
           >
-            <span className="care-alert-icon"><MessageSquare size={20} /></span>
+            <span className="care-alert-icon">
+              <MessageSquare size={20} />
+            </span>
             <div>
               <small>Chờ trả lời tin nhắn</small>
               <strong>{careAlerts.data.unansweredConversations}</strong>
             </div>
-            {careAlerts.data.unansweredConversations > 0 && <ChevronRight size={16} className="care-alert-arrow" />}
+            {careAlerts.data.unansweredConversations > 0 && (
+              <ChevronRight size={16} className="care-alert-arrow" />
+            )}
           </button>
         </div>
       )}
@@ -227,7 +244,12 @@ export function MyDashboard({
         <section className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <div
             className="panel-head"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12 }}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingBottom: 12,
+            }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -252,10 +274,7 @@ export function MyDashboard({
           <div style={{ padding: '0 24px 24px', flex: 1 }}>
             {totalDailyCount > 0 && (
               <div className="task-progress-bar">
-                <div
-                  className="task-progress-fill"
-                  style={{ width: `${progressPercent}%` }}
-                />
+                <div className="task-progress-fill" style={{ width: `${progressPercent}%` }} />
               </div>
             )}
 
@@ -265,45 +284,48 @@ export function MyDashboard({
                 {dailyTasks.data.map((t) => {
                   const isDone = t.doneToday || t.status === 'DONE';
                   return (
-                    <div
-                      className={`task-item ${isDone ? 'is-done' : ''}`}
-                      key={t.id}
-                    >
+                    <div className={`task-item ${isDone ? 'is-done' : ''}`} key={t.id}>
                       <input
                         type="checkbox"
                         checked={isDone}
+                        disabled={!t.canUpdateStatus}
                         onChange={() => toggleDailyTask(t)}
                         aria-label={t.title}
                       />
                       <div className="task-body">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <p className={`task-title ${isDone ? 'done' : ''}`}>
-                            {t.title}
-                          </p>
+                          <p className={`task-title ${isDone ? 'done' : ''}`}>{t.title}</p>
                           {isDone && (
-                            <span className="badge" style={{ background: '#dcfce7', color: '#166534', fontSize: '0.75rem', padding: '2px 8px' }}>
+                            <span
+                              className="badge"
+                              style={{
+                                background: '#dcfce7',
+                                color: '#166534',
+                                fontSize: '0.75rem',
+                                padding: '2px 8px',
+                              }}
+                            >
                               Đã xong
                             </span>
                           )}
                         </div>
                         {t.note && <p className="task-note">{t.note}</p>}
+                        <TaskPeopleSummary task={t} />
                       </div>
-                      <div className="row-actions" style={{ marginLeft: 8, flexShrink: 0 }}>
-                        <button
-                          className="icon-button"
-                          onClick={() => setDailyModal(t)}
-                          title="Chỉnh sửa"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          className="icon-button"
-                          onClick={() => deleteTask(t)}
-                          title="Xóa"
-                        >
-                          <Trash size={15} />
-                        </button>
-                      </div>
+                      {t.canManage && (
+                        <div className="row-actions" style={{ marginLeft: 8, flexShrink: 0 }}>
+                          <button
+                            className="icon-button"
+                            onClick={() => setDailyModal(t)}
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button className="icon-button" onClick={() => deleteTask(t)} title="Xóa">
+                            <Trash size={15} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -314,12 +336,10 @@ export function MyDashboard({
                       Chưa có checklist hàng ngày. Hãy thêm các công việc cần lặp lại mỗi ngày:
                     </p>
                     <p className="muted" style={{ fontSize: '0.85rem', margin: '0 0 16px' }}>
-                      (Ví dụ: Check tin nhắn Messenger, Gọi điện chăm sóc 5 khách cũ, Đối soát vận đơn VNPost...)
+                      (Ví dụ: Check tin nhắn Messenger, Gọi điện chăm sóc 5 khách cũ, Đối soát vận
+                      đơn VNPost...)
                     </p>
-                    <button
-                      className="secondary"
-                      onClick={() => setDailyModal('create')}
-                    >
+                    <button className="secondary" onClick={() => setDailyModal('create')}>
                       <Plus size={16} /> Thêm việc hàng ngày
                     </button>
                   </div>
@@ -333,7 +353,12 @@ export function MyDashboard({
         <section className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
           <div
             className="panel-head"
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12 }}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingBottom: 12,
+            }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -424,7 +449,7 @@ export function MyDashboard({
                         type="checkbox"
                         checked={isDone}
                         onChange={() => toggleOneTask(t)}
-                        disabled={t.status === 'CANCELLED'}
+                        disabled={t.status === 'CANCELLED' || !t.canUpdateStatus}
                         aria-label={t.title}
                       />
                       <span
@@ -432,10 +457,15 @@ export function MyDashboard({
                         title={'Độ ưu tiên: ' + t.priority}
                       />
                       <div className="task-body">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <p className={`task-title ${isDone ? 'done' : ''}`}>
-                            {t.title}
-                          </p>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            flexWrap: 'wrap',
+                          }}
+                        >
+                          <p className={`task-title ${isDone ? 'done' : ''}`}>{t.title}</p>
                           {t.customer ? (
                             <button
                               type="button"
@@ -459,6 +489,8 @@ export function MyDashboard({
                           )}
                         </div>
                         {t.note && <p className="task-note">{t.note}</p>}
+                        <TaskPeopleSummary task={t} />
+                        <SharedTaskStatus task={t} changed={() => setRevision((v) => v + 1)} />
                         {t.dueDate && (
                           <small
                             className={`block ${isOverdue ? 'overdue' : ''}`}
@@ -476,31 +508,35 @@ export function MyDashboard({
                       </div>
 
                       {t.contactChannel === 'phone' && (
-                        <span title="Gọi điện"><Phone size={16} className="muted" /></span>
+                        <span title="Gọi điện">
+                          <Phone size={16} className="muted" />
+                        </span>
                       )}
                       {t.contactChannel === 'zalo' && (
-                        <span title="Zalo"><MessageCircle size={16} className="muted" /></span>
+                        <span title="Zalo">
+                          <MessageCircle size={16} className="muted" />
+                        </span>
                       )}
                       {t.contactChannel === 'visit' && (
-                        <span title="Gặp trực tiếp"><Home size={16} className="muted" /></span>
+                        <span title="Gặp trực tiếp">
+                          <Home size={16} className="muted" />
+                        </span>
                       )}
 
-                      <div className="row-actions" style={{ marginLeft: 8, flexShrink: 0 }}>
-                        <button
-                          className="icon-button"
-                          onClick={() => setOnceModal(t)}
-                          title="Chỉnh sửa"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          className="icon-button"
-                          onClick={() => deleteTask(t)}
-                          title="Xóa"
-                        >
-                          <Trash size={15} />
-                        </button>
-                      </div>
+                      {t.canManage && (
+                        <div className="row-actions" style={{ marginLeft: 8, flexShrink: 0 }}>
+                          <button
+                            className="icon-button"
+                            onClick={() => setOnceModal(t)}
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button className="icon-button" onClick={() => deleteTask(t)} title="Xóa">
+                            <Trash size={15} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -624,10 +660,7 @@ function DailyTaskModal({
   done: () => void;
 }) {
   return (
-    <Modal
-      title={task ? 'Sửa việc hàng ngày' : 'Thêm việc lặp lại hàng ngày'}
-      close={close}
-    >
+    <Modal title={task ? 'Sửa việc hàng ngày' : 'Thêm việc lặp lại hàng ngày'} close={close}>
       <Form
         label="Lưu công việc"
         done={done}
@@ -636,6 +669,7 @@ function DailyTaskModal({
             title: f.get('title'),
             note: f.get('note'),
             isRecurring: true,
+            ...taskPeopleBody(f),
             ...(task ? { version: task.version } : {}),
           };
           await api('/sales/tasks' + (task ? '/' + task.id : ''), task ? 'PATCH' : 'POST', body);
@@ -659,6 +693,7 @@ function DailyTaskModal({
             placeholder="Nội dung chi tiết hoặc tiêu chuẩn cần đạt khi thực hiện..."
           />
         </label>
+        <TaskPeopleFields task={task} />
       </Form>
     </Modal>
   );
@@ -677,14 +712,10 @@ function OneTimeTaskModal({
   // Option to link customer: default is false unless task already has a customer!
   const [hasCustomer, setHasCustomer] = useState<boolean>(!!task?.customer);
   const [search, setSearch] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
-    task?.customer?.id || '',
-  );
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(task?.customer?.id || '');
 
   const customers = useResource<Page<any>>(
-    hasCustomer
-      ? '/sales/customers?pageSize=20&search=' + encodeURIComponent(search)
-      : '',
+    hasCustomer ? '/sales/customers?pageSize=20&search=' + encodeURIComponent(search) : '',
   );
 
   return (
@@ -697,6 +728,7 @@ function OneTimeTaskModal({
           const customerId = hasCustomer && selectedCustomerId ? selectedCustomerId : undefined;
 
           const body: Record<string, any> = {
+            ...taskPeopleBody(f),
             title: f.get('title'),
             note: f.get('note') || '',
             dueDate: f.get('dueDate') || null,
@@ -729,7 +761,15 @@ function OneTimeTaskModal({
 
         {/* Customer option: Internal task vs Customer task */}
         <div style={{ margin: '8px 0 16px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 500 }}>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
             <input
               type="checkbox"
               className="task-checkbox"
@@ -749,7 +789,14 @@ function OneTimeTaskModal({
                 borderRadius: 8,
               }}
             >
-              <label style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 6, display: 'block' }}>
+              <label
+                style={{
+                  fontSize: '0.85rem',
+                  color: 'var(--muted)',
+                  marginBottom: 6,
+                  display: 'block',
+                }}
+              >
                 Chọn khách hàng:
               </label>
               <input
@@ -764,9 +811,7 @@ function OneTimeTaskModal({
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
               >
                 <option value="">-- Chọn khách hàng trong danh sách --</option>
-                {task?.customer && (
-                  <option value={task.customer.id}>{task.customer.name}</option>
-                )}
+                {task?.customer && <option value={task.customer.id}>{task.customer.name}</option>}
                 {customers.data?.items
                   ?.filter((c: any) => c.id !== task?.customer?.id)
                   .map((c: any) => (
@@ -787,6 +832,7 @@ function OneTimeTaskModal({
             placeholder="Nội dung chi tiết, yêu cầu cần xử lý..."
           />
         </label>
+        <TaskPeopleFields task={task} />
 
         <div className="form-grid">
           <label>
@@ -902,9 +948,7 @@ function CareAlertModal({
                       <td>{phone || '—'}</td>
                       <td>
                         {status && (
-                          <span className="badge">
-                            {customerStatuses[status] || status}
-                          </span>
+                          <span className="badge">{customerStatuses[status] || status}</span>
                         )}
                       </td>
                       <td>{lastContact ? date(lastContact) : '—'}</td>

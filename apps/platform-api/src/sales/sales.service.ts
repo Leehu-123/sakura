@@ -518,7 +518,7 @@ export class SalesService {
       const old = await this.order(tx, actor, id, 'sales.orders.manage');
       checkVersion(old.version, dto.version);
       checkTransition(old.status, dto.status, old.paidAmount, dto.reason);
-      if (dto.status === 'CANCELLED')
+      if (['CANCELLED', 'RETURNED'].includes(dto.status))
         await tx.deliverySlip.updateMany({
           where: { orderId: id, voidedAt: null },
           data: { voidedAt: new Date() },
