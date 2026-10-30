@@ -93,22 +93,22 @@ export function MessengerSlaPanel({
           <p>
             Kỳ {r.data.from} – {r.data.to} · Hạn {r.data.responseSeconds} giây · Tính 24/7
           </p>
-          <div className="kpi-grid">
-            <div className="kpi">
+          <div className="business-kpis">
+            <div className="business-kpi">
               <span>Phản hồi đúng giờ</span>
               <strong>{percent(r.data.summary.onTimeRate)}</strong>
               <small>
                 {r.data.summary.onTime}/{r.data.summary.answered} lượt đã trả lời
               </small>
             </div>
-            <div className="kpi">
+            <div className="business-kpi">
               <span>Phản hồi chậm</span>
               <strong>{percent(r.data.summary.lateRate)}</strong>
               <small>
                 {r.data.summary.late}/{r.data.summary.answered} lượt đã trả lời
               </small>
             </div>
-            <div className="kpi">
+            <div className="business-kpi">
               <span>Chưa trả lời quá hạn</span>
               <strong>{r.data.summary.pendingLate}</strong>
               <small>Trong {r.data.summary.pending} lượt đang chờ của kỳ</small>
