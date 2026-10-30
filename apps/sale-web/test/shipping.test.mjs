@@ -187,7 +187,7 @@ test('Shipping report renders separate costs, missing counts and export', async 
   };
   globalThis.shippingHttp = async (path) => path.startsWith('/sales/messenger-sla') ? {
     from:'2026-08-20',to:'2026-08-20',responseSeconds:180,summary:{answered:1,onTime:1,late:0,pending:0,pendingLate:0,estimated:0,onTimeRate:100,lateRate:0},rows:[]
-  } : ({
+  } : path.startsWith('/sales/productivity') ? {rows:[],asOf:'2026-08-20T00:00:00Z'} : ({
     from: '2026-08-20',
     to: '2026-08-20',
     source: 'SAKURA',
