@@ -7,6 +7,7 @@ import { orderStatuses, Actor } from './types';
 import { salesChannels, deliveryRegions } from './OrderMetadata';
 import { ReportOrders } from './ReportOrders';
 import { Productivity } from './Productivity';
+import { MessengerSlaPanel } from './MessengerSla';
 type Metrics = {
   shippingCharged: string;
   shippingEstimated: string;
@@ -571,6 +572,7 @@ export function SalesReport({
           )}
           {detailed && <ReportAiPanel openSettings={openAiSettings} />}
           {detailed && <Productivity actor={actor} />}
+          {detailed && <MessengerSlaPanel actor={actor} from={query.from} to={query.to} />}
           <section className="panel">
             <div className="panel-head">
               <h2>Chi phí vận chuyển</h2>

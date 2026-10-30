@@ -567,6 +567,7 @@ model ChatConversation {
 }
 
 model ChatMessage {
+  responseSentAt DateTime?
   aiDraftId String? @unique @db.Uuid
   aiDraft ChatAiDraft? @relation(fields: [aiDraftId], references: [id])
   imported        Boolean @default(false)
@@ -744,6 +745,13 @@ model ReportAiConfig {
   id Int @id @default(1)
   provider String @default("OPENAI")
   allowWeb Boolean @default(false)
+  version Int @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model MessengerSlaConfig {
+  id Int @id @default(1)
+  responseSeconds Int @default(180)
   version Int @default(1)
   updatedAt DateTime @updatedAt
 }

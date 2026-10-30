@@ -22,6 +22,7 @@ import {
 import { Task } from './MyTasks';
 import { SalesStaff } from './SalesStaff';
 import { Productivity } from './Productivity';
+import { MessengerSlaPanel } from './MessengerSla';
 import {
   TaskPeopleFields,
   TaskPeopleSummary,
@@ -558,6 +559,7 @@ export function MyDashboard({
 
       <SalesStaff actor={actor} />
       <Productivity actor={actor} />
+      <MessengerSlaPanel actor={actor} />
       {/* 3. RECENT ORDERS SECTION */}
       {dashboard.data &&
         (() => {

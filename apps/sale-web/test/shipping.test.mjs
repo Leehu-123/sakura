@@ -21,7 +21,7 @@ dom.window.HTMLDialogElement.prototype.close = function () {
 const { createRoot } = await import('react-dom/client');
 const bundle = await build({
   stdin: {
-    contents: `export {ShipmentTracking} from './src/shipping/ShipmentTracking'; export {ShippingSettings} from './src/shipping/ShippingSettings';export {SalesReport} from './src/sales/Reports';export {MonthlyComparison,monthGrowth} from './src/sales/MonthlyComparison';export {ReportAiSettings,ReportAiPanel} from './src/sales/ReportAiSettings';`,
+    contents: `export {MessengerSlaSettings,MessengerSlaPanel} from './src/sales/MessengerSla';export {ShipmentTracking} from './src/shipping/ShipmentTracking'; export {ShippingSettings} from './src/shipping/ShippingSettings';export {SalesReport} from './src/sales/Reports';export {MonthlyComparison,monthGrowth} from './src/sales/MonthlyComparison';export {ReportAiSettings,ReportAiPanel} from './src/sales/ReportAiSettings';`,
     resolveDir: fileURLToPath(new URL('../', import.meta.url)),
   },
   bundle: true,
@@ -53,6 +53,22 @@ const actor = {
   id: 'tester',
   grants: [{ permission: 'sales.shipments.manage', scope: 'ASSIGNED' }],
 };
+test('Messenger SLA settings persist seconds and report explains 24/7 rates and pending work', async () => {
+  const {MessengerSlaSettings,MessengerSlaPanel}=compiled.exports;
+  const calls=[];
+  globalThis.shippingHttp=async (...a)=>{calls.push(a);return {version:0,responseSeconds:180};};
+  let root=await mount(MessengerSlaSettings,{});
+  assert.match(node.textContent,/24\/7/);
+  node.querySelector('[name=responseSeconds]').value='90';
+  await act(async()=>node.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true})));
+  assert.deepEqual(calls.find(x=>x[1]==='PATCH')[2],{version:0,responseSeconds:90});
+  await act(async()=>root.unmount());
+  const summary={answered:0,onTime:0,late:0,pending:2,pendingLate:1,estimated:0,onTimeRate:null,lateRate:null};
+  globalThis.shippingHttp=async path=>{assert.match(path,/from=2026-10-01/);return {from:'2026-10-01',to:'2026-10-30',responseSeconds:90,summary,rows:[]};};
+  root=await mount(MessengerSlaPanel,{actor:{id:'reader',grants:[{permission:'sales.reports.read',scope:'ASSIGNED'}]},from:'2026-10-01',to:'2026-10-30'});
+  assert.match(node.textContent,/Chưa có mẫu/);assert.match(node.textContent,/Chưa trả lời quá hạn/);assert.match(node.textContent,/Hạn 90 giây/);
+  await act(async()=>root.unmount());
+});
 const order = {
   id: 'order',
   version: 3,

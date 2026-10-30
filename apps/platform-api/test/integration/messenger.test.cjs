@@ -417,6 +417,8 @@ test('Messenger: webhook, phạm vi, trả lời và đối chiếu kết quả'
         201,
       );
       assert.equal(r.body.state, 'SENT');
+      assert.ok(r.body.responseSentAt);
+      assert.ok(new Date(r.body.responseSentAt) >= new Date(r.body.sourceAt));
       const status = await send(
         'get',
         '/conversations/' + conversation.id + '/requests/' + body.requestKey,

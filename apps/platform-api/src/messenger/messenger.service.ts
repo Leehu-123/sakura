@@ -472,6 +472,7 @@ export class MessengerService {
         where: { id: prepared.message.id },
         data: {
           state: result.state,
+          responseSentAt: result.state === 'SENT' ? new Date() : null,
           remoteKey: result.mid ? prepared.c.pageId + ':' + result.mid : null,
         },
       });

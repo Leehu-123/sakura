@@ -195,6 +195,7 @@ import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { SalesStaffController, SalesStaffService } from './staff';
 import { ProductivityController, ProductivityService } from './productivity';
+import { MessengerSla, MessengerSlaController } from './messenger-sla';
 
 @Module({
   controllers: [
@@ -205,6 +206,7 @@ import { ProductivityController, ProductivityService } from './productivity';
     DashboardController,
     SalesStaffController,
     ProductivityController,
+    MessengerSlaController,
   ],
   providers: [
     SalesService,
@@ -215,6 +217,7 @@ import { ProductivityController, ProductivityService } from './productivity';
     DashboardService,
     SalesStaffService,
     ProductivityService,
+    MessengerSla,
   ],
 })
 export class SalesModule {}

@@ -1,0 +1,8 @@
+CREATE TABLE "MessengerSlaConfig" (
+  "id" INTEGER NOT NULL DEFAULT 1 PRIMARY KEY,
+  "responseSeconds" INTEGER NOT NULL DEFAULT 180,
+  "version" INTEGER NOT NULL DEFAULT 1,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "MessengerSlaConfig_seconds" CHECK ("responseSeconds" BETWEEN 1 AND 604800)
+);
+ALTER TABLE "ChatMessage" ADD COLUMN "responseSentAt" TIMESTAMP(3);

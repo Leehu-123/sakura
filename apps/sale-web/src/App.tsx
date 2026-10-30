@@ -37,6 +37,7 @@ import { CalendarCheck, Kanban, ListTodo } from 'lucide-react';
 import { TelegramSettings } from './TelegramSettings';
 import { ShippingSettings } from './shipping/ShippingSettings';
 import { ReportAiSettings } from './sales/ReportAiSettings';
+import { MessengerSlaSettings } from './sales/MessengerSla';
 import { EmployeeContacts, EmployeeContactFields } from './EmployeeContacts';
 import { CompanyProfile } from './CompanyProfile';
 type Grant = { permission: string; scope: string };
@@ -95,6 +96,7 @@ type Tab =
   | 'settings'
   | 'shipping'
   | 'report-ai'
+  | 'messenger-sla'
   | 'reports'
   | 'storage'
   | 'overview'
@@ -127,6 +129,7 @@ const titles: Record<Tab, string> = {
   settings: 'Cài đặt',
   shipping: 'Vận chuyển',
   'report-ai': 'AI báo cáo',
+  'messenger-sla': 'Hạn phản hồi Messenger',
   reports: 'Báo cáo',
   storage: 'Lưu trữ & sao lưu',
   customers: 'Khách hàng',
@@ -682,6 +685,7 @@ function Workspace({
       ['telegram', 'core.users.manage'],
       ['shipping', 'core.shipping.manage'],
       ['report-ai', 'core.ai.manage'],
+      ['messenger-sla', 'core.messenger.manage'],
     ] as const
   ).filter(([, p]) => can(p));
   const accountSection = ['users', 'roles', 'catalogs'].includes(tab);
@@ -692,6 +696,7 @@ function Workspace({
     'telegram',
     'shipping',
     'report-ai',
+    'messenger-sla',
   ].includes(tab);
   const nav: {
     id: Tab;
@@ -882,6 +887,7 @@ function Workspace({
               {tab === 'telegram' && <TelegramSettings />}
               {tab === 'shipping' && <ShippingSettings />}
               {tab === 'report-ai' && <ReportAiSettings />}
+              {tab === 'messenger-sla' && <MessengerSlaSettings />}
               {tab === 'orders' && <Orders actor={me} />}
               {tab === 'imports' && <Imports />}
               {tab === 'historical' && <HistoricalOrders />}

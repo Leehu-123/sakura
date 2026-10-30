@@ -72,6 +72,55 @@ after(async () => {
 });
 const http = () => request(app.getHttpServer());
 const auth = () => ({ Authorization: 'Bearer ' + token });
+test('Messenger SLA: configurable 24/7 threshold, response episodes and permissions', async () => {
+  const slaAdmin=await db.user.create({data:{email:'sla-admin@test.local',displayName:'SLA admin',passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId:adminRole.id}}}});
+  const adminToken=await mint(slaAdmin.id);
+  const worker=await db.user.create({data:{email:'sla-worker@test.local',displayName:'SLA worker',passwordHash:admin.passwordHash,mustChangePassword:false,roleAssignments:{create:{roleId:regionalRole.id}}}});
+  const denied=await db.user.create({data:{email:'sla-denied@test.local',displayName:'Denied SLA',passwordHash:admin.passwordHash,mustChangePassword:false}});
+  const wt=await mint(worker.id),dt=await mint(denied.id);
+  const call=(method,path,t,body)=>{const r=http()[method]('/api/v1/sales/messenger-sla'+path).set('Authorization','Bearer '+t);return body?r.send(body):r;};
+  let config=(await call('get','/config',adminToken).expect(200)).body;
+  assert.equal(config.responseSeconds,180);
+  await call('get','/config',wt).expect(403);
+  await call('patch','/config',wt,{version:config.version,responseSeconds:60}).expect(403);
+  await call('patch','/config',adminToken,{version:config.version,responseSeconds:0}).expect(400);
+  await call('patch','/config',adminToken,{version:config.version,responseSeconds:604801}).expect(400);
+  config=(await call('patch','/config',adminToken,{version:config.version,responseSeconds:180}).expect(200)).body;
+  await call('patch','/config',adminToken,{version:0,responseSeconds:60}).expect(409);
+  const conv=await db.chatConversation.create({data:{pageId:'sla-page',psid:randomUUID(),supportUserId:worker.id}});
+  const stamp=(s)=>new Date('2020-01-05T'+s+'+07:00');
+  const message=(c,d,s,at,extra={})=>db.chatMessage.create({data:{conversationId:c.id,direction:d,state:s,text:'SLA test',sourceAt:stamp(at),...(d==='INBOUND'?{remoteKey:randomUUID()}:{actorId:worker.id,requestKey:randomUUID()}),...extra}});
+  await message(conv,'INBOUND','RECEIVED','00:00:00');
+  await message(conv,'INBOUND','RECEIVED','00:02:30');
+  await message(conv,'OUTBOUND','SENT','00:02:50',{responseSentAt:stamp('00:03:00')});
+  await message(conv,'OUTBOUND','SENT','00:04:00',{responseSentAt:stamp('00:04:00')});
+  await message(conv,'INBOUND','RECEIVED','00:10:00');
+  await message(conv,'OUTBOUND','FAILED','00:11:00');
+  await message(conv,'OUTBOUND','SENT','00:11:30',{responseSentAt:stamp('00:15:00')});
+  const pending=await db.chatConversation.create({data:{pageId:'sla-page',psid:randomUUID(),supportUserId:worker.id}});
+  await message(pending,'INBOUND','RECEIVED','01:00:00');
+  await message(pending,'OUTBOUND','UNKNOWN','01:01:00');
+  const imported=await db.chatConversation.create({data:{pageId:'sla-page',psid:randomUUID()}});
+  await message(imported,'INBOUND','RECEIVED','02:00:00');
+  await message(imported,'OUTBOUND','SENT','02:01:00',{actorId:null,requestKey:null,remoteKey:randomUUID(),imported:true});
+  const period='?from=2020-01-05&to=2020-01-05';
+  let report=(await call('get',period,adminToken).expect(200)).body;
+  assert.deepEqual(report.summary,{answered:3,onTime:2,late:1,pending:1,pendingLate:1,estimated:0,onTimeRate:66.67,lateRate:33.33});
+  const own=(await call('get',period,wt).expect(200)).body;
+  assert.equal(own.rows.length,1);assert.equal(own.rows[0].id,worker.id);assert.equal(own.summary.onTimeRate,50);
+  await call('get',period,dt).expect(403);
+  await call('get','?from=2020-02-30',adminToken).expect(400);
+  const empty=(await call('get','?from=2019-01-01&to=2019-01-01',wt).expect(200)).body;
+  assert.equal(empty.summary.onTimeRate,null);assert.equal(empty.summary.lateRate,null);
+  await call('patch','/config',adminToken,{version:config.version,responseSeconds:60}).expect(200);
+  report=(await call('get',period,wt).expect(200)).body;
+  assert.equal(report.summary.onTime,0);assert.equal(report.summary.late,2);assert.equal(report.summary.lateRate,100);
+  assert.equal(await db.auditLog.count({where:{action:'messenger.sla_updated'}}),2);
+  const legacy=await db.chatConversation.create({data:{pageId:'sla-page',psid:randomUUID(),supportUserId:worker.id}});
+  await db.chatMessage.createMany({data:[{conversationId:legacy.id,direction:'INBOUND',state:'RECEIVED',text:'night',sourceAt:new Date('2020-01-06T23:59:30+07:00'),remoteKey:randomUUID()},{conversationId:legacy.id,direction:'OUTBOUND',state:'SENT',text:'legacy reply',sourceAt:new Date('2020-01-07T00:00:30+07:00'),requestKey:randomUUID(),actorId:worker.id}]});
+  const crossDay=(await call('get','?from=2020-01-06&to=2020-01-06',wt).expect(200)).body;
+  assert.equal(crossDay.summary.answered,1);assert.equal(crossDay.summary.onTime,1);assert.equal(crossDay.summary.estimated,1);
+});
 async function mint(userId) {
   const session = await db.session.create({
     data: { userId, expiresAt: new Date(Date.now() + 86400000) },
