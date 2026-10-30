@@ -185,7 +185,9 @@ test('Shipping report renders separate costs, missing counts and export', async 
     shippingEstimatedOrders: 1,
     shippingComparedOrders: 2,
   };
-  globalThis.shippingHttp = async () => ({
+  globalThis.shippingHttp = async (path) => path.startsWith('/sales/messenger-sla') ? {
+    from:'2026-08-20',to:'2026-08-20',responseSeconds:180,summary:{answered:1,onTime:1,late:0,pending:0,pendingLate:0,estimated:0,onTimeRate:100,lateRate:0},rows:[]
+  } : ({
     from: '2026-08-20',
     to: '2026-08-20',
     source: 'SAKURA',
@@ -199,13 +201,18 @@ test('Shipping report renders separate costs, missing counts and export', async 
     statuses: [],
     carriers: [{ ...m, label: 'VNPost' }],
   });
-  const root = await mount(SalesReport, { actor, detailed: true, openReports: () => {} });
+  const reportActor={...actor,grants:[...actor.grants,{permission:'sales.reports.read',scope:'ASSIGNED'}]};
+  const root = await mount(SalesReport, { actor: reportActor, detailed: true, openReports: () => {} });
+  assert.match(node.textContent,/Phản hồi Messenger đúng giờ/);
   assert.match(node.textContent, /1 đơn chưa có phí thực trả/);
   assert.match(node.textContent, /29\.000/);
   assert.match(node.textContent, /VNPost/);
   assert.ok(node.querySelectorAll('table').length >= 2);
   assert.ok([...node.querySelectorAll('button')].some((b) => b.textContent.includes('Xuất CSV')));
   await act(async () => root.unmount());
+  const overview=await mount(SalesReport,{actor:reportActor,detailed:false,openReports:()=>{}});
+  assert.match(node.textContent,/Phản hồi Messenger đúng giờ/);
+  await act(async()=>overview.unmount());
 });
 
 test('Monthly comparison preserves zero months, partial periods and metric switching', async () => {

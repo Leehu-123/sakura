@@ -572,7 +572,7 @@ export function SalesReport({
           )}
           {detailed && <ReportAiPanel openSettings={openAiSettings} />}
           {detailed && <Productivity actor={actor} />}
-          {detailed && <MessengerSlaPanel actor={actor} from={query.from} to={query.to} />}
+          <MessengerSlaPanel actor={actor} from={query.from} to={query.to} />
           <section className="panel">
             <div className="panel-head">
               <h2>Chi phí vận chuyển</h2>
