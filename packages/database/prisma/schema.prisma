@@ -147,6 +147,10 @@ model Employee {
   id           String      @id @default(uuid()) @db.Uuid
   code         String      @unique
   fullName     String
+  jobTitle     String @default("")
+  workEmail    String @default("")
+  phone        String @default("")
+  version      Int @default(1)
   userId       String?     @unique @db.Uuid
   user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   departmentId String?     @db.Uuid
@@ -350,6 +354,14 @@ model ProductVariant {
 }
 
 model Order {
+  salesTeamName String @default("")
+  salesChannel String @default("UNKNOWN")
+  salesSourceName String @default("")
+  sourcePageId String?
+  deliveryRegion String @default("UNKNOWN")
+  promisedDeliveryAt DateTime?
+  deliveredAt DateTime?
+  codStatus String @default("UNKNOWN")
   requestKey      String         @unique @db.Uuid
   requestHash     String
   id              String         @id @default(uuid()) @db.Uuid
@@ -395,6 +407,13 @@ model Order {
 
   @@index([customerId, createdAt])
   @@index([status, createdAt])
+}
+
+model CompanyProfile {
+  id Int @id @default(1)
+  name String @default("Sakura")
+  address String @default("")
+  version Int @default(1)
 }
 
 model ShippingConnection {

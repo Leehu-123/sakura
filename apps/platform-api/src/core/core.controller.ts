@@ -7,6 +7,8 @@ import {
   CatalogDto,
   CreateUserDto,
   EmployeeDto,
+  EmployeeContactDto,
+  CompanyProfileDto,
   PageDto,
   ResetPasswordDto,
   RoleDto,
@@ -18,6 +20,16 @@ import {
 @Controller('core')
 export class CoreController {
   constructor(private readonly core: CoreService) {}
+  @Get('company-profile')
+  @RequirePermission('core.catalogs.read')
+  companyProfile() {
+    return this.core.companyProfile();
+  }
+  @Patch('company-profile')
+  @RequirePermission('core.catalogs.manage')
+  saveCompanyProfile(@CurrentUser() actor: Principal, @Body() dto: CompanyProfileDto) {
+    return this.core.saveCompanyProfile(actor.id, dto);
+  }
   @Get('users')
   @RequirePermission('core.users.read')
   @ApiOperation({ summary: 'Danh sách tài khoản' })
@@ -95,6 +107,15 @@ export class CoreController {
   @ApiOperation({ summary: 'Thêm khu vực, phòng ban hoặc chi nhánh' })
   catalog(@CurrentUser() actor: Principal, @Param('type') type: string, @Body() dto: CatalogDto) {
     return this.core.createCatalog(actor.id, type, dto);
+  }
+  @Patch('catalogs/employees/:id')
+  @RequirePermission('core.catalogs.manage')
+  employeeContact(
+    @CurrentUser() actor: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EmployeeContactDto,
+  ) {
+    return this.core.employeeContact(actor.id, id, dto);
   }
   @Get('audit-logs')
   @RequirePermission('core.audit.read')

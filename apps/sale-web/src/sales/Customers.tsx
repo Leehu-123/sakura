@@ -525,6 +525,7 @@ export function Customers({ actor, initialId }: { actor: Actor; initialId?: stri
                 <tr>
                   <th>Khách hàng</th>
                   <th>Số điện thoại</th>
+                  <th>Lịch sử mua</th>
                   <th>Phân loại</th>
                   <th>Người chăm sóc</th>
                   <th>Khu vực</th>
@@ -539,6 +540,7 @@ export function Customers({ actor, initialId }: { actor: Actor; initialId?: stri
                       </button>
                     </td>
                     <td>{c.phone || 'Chưa có số điện thoại'}</td>
+                    <td>{c.validPurchaseCount === undefined ? 'Chưa thống kê' : c.validPurchaseCount===0 ? 'Chưa có đơn hợp lệ' : c.validPurchaseCount===1 ? 'Mua một lần' : `Mua ${c.validPurchaseCount} lần`}</td>
                     <td>
                       <span className="badge">{customerStatuses[c.status]}</span>
                     </td>

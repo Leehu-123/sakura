@@ -9,6 +9,8 @@ import {
   IsEnum,
   IsArray,
   IsBoolean,
+  IsIn,
+  IsDateString,
   Matches,
   Max,
   Min,
@@ -106,6 +108,10 @@ export class OrderLineDto {
   expectedPrice!: string;
 }
 export class CreateOrderDto {
+  @optional() @IsString() @MaxLength(100) salesTeamName?: string;
+  @optional() @IsIn(['UNKNOWN', 'PAGE', 'ZALO', 'SELF', 'OTHER']) salesChannel?: string;
+  @optional() @IsString() @MaxLength(150) salesSourceName?: string;
+  @optional() @IsIn(['UNKNOWN', 'NORTH', 'CENTRAL', 'SOUTH', 'HIGHLANDS']) deliveryRegion?: string;
   @optional() @IsUUID() conversationId?: string;
   @optional() @IsBoolean() confirm?: boolean;
   @ApiProperty() @IsUUID() requestKey!: string;
@@ -129,6 +135,22 @@ export class CreateOrderDto {
   @Matches(/^\d{1,12}$/)
   shippingFee: string = '0';
   @ApiPropertyOptional() @optional() @IsString() @MaxLength(2000) note: string = '';
+}
+export class OrderMetadataDto extends VersionDto {
+  @optional() @IsString() @MaxLength(100) salesTeamName?: string;
+  @IsIn(['UNKNOWN', 'PAGE', 'ZALO', 'SELF', 'OTHER']) salesChannel!: string;
+  @IsString() @MaxLength(150) salesSourceName!: string;
+  @IsIn(['UNKNOWN', 'NORTH', 'CENTRAL', 'SOUTH', 'HIGHLANDS']) deliveryRegion!: string;
+  @IsIn(['UNKNOWN', 'NOT_COD', 'WAITING_COLLECTION', 'COLLECTED', 'REMITTED']) codStatus!: string;
+  @ValidateIf((_o, v) => v !== undefined && v !== null) @IsDateString() promisedDeliveryAt?:
+    string | null;
+  @ValidateIf((_o, v) => v !== undefined && v !== null) @IsDateString() deliveredAt?: string | null;
+  @ValidateIf((_o, v) => v !== undefined && v !== null) @IsUUID() closedByUserId?: string | null;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(3)
+  @MaxLength(1000)
+  reason!: string;
 }
 export class OrderQuery extends PageDto {
   @ApiPropertyOptional() @optional() @IsUUID() customerId?: string;

@@ -26,6 +26,7 @@ import {
   CreateOrderDto,
   OrderQuery,
   OrderStatusDto,
+  OrderMetadataDto,
   PaymentDto,
   ShippingDto,
 } from './dto';
@@ -139,6 +140,11 @@ export class SalesController {
   createOrder(@CurrentUser() actor: Principal, @Body() dto: CreateOrderDto) {
     return this.sales.createOrder(actor, dto);
   }
+  @Get('orders/closers')
+  @RequirePermission('sales.orders.manage', 'GLOBAL')
+  closers() {
+    return this.sales.orderClosers();
+  }
   @Get('orders/:id')
   @RequirePermission('sales.orders.read', 'ASSIGNED')
   @ApiOperation({ summary: 'Chi tiết đơn và 100 thao tác gần nhất' })
@@ -154,6 +160,15 @@ export class SalesController {
     @Body() dto: OrderStatusDto,
   ) {
     return this.sales.changeOrderStatus(actor, id, dto);
+  }
+  @Patch('orders/:id/metadata')
+  @RequirePermission('sales.orders.manage', 'ASSIGNED')
+  metadata(
+    @CurrentUser() actor: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: OrderMetadataDto,
+  ) {
+    return this.sales.orderMetadata(actor, id, dto);
   }
   @Patch('orders/:id/shipping') @RequirePermission('sales.shipments.manage', 'ASSIGNED') shipping(
     @CurrentUser() a: Principal,
@@ -178,6 +193,8 @@ import { ReportAiController, ReportAiSettings } from './report-ai';
 import { TasksService } from './tasks.service';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
+import { SalesStaffController, SalesStaffService } from './staff';
+import { ProductivityController, ProductivityService } from './productivity';
 
 @Module({
   controllers: [
@@ -186,6 +203,8 @@ import { DashboardService } from './dashboard.service';
     ReportAiController,
     TasksController,
     DashboardController,
+    SalesStaffController,
+    ProductivityController,
   ],
   providers: [
     SalesService,
@@ -194,6 +213,8 @@ import { DashboardService } from './dashboard.service';
     ReportAiSettings,
     TasksService,
     DashboardService,
+    SalesStaffService,
+    ProductivityService,
   ],
 })
 export class SalesModule {}

@@ -499,6 +499,7 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
         data: {
           name: 'Report test',
           address: 'Test',
+          regionId: region.id,
           createdById: a.id,
           assignments: {
             create: { userId: a.id, assignedById: admin.id, reason: 'Report fixture' },
@@ -561,6 +562,13 @@ test('Sales: phân quyền, bàn giao và đơn hàng với PostgreSQL thật', 
         },
       });
       const path = '/sales/reports?from=2025-06-01&to=2025-06-01';
+      const regionFeed = (await get('/sales/order-feed?search=Report%20test', ta).expect(200)).body;
+      assert.ok(regionFeed.items.some(o => o.source === 'SAKURA'));
+      assert.ok(regionFeed.items.some(o => o.source === 'SAPO'));
+      assert.ok(regionFeed.items.every(o => o.regionId === region.id && o.regionName === region.name));
+      const unlinkedFeed = (await get('/sales/order-feed?search=Runlinked', tl).expect(200)).body;
+      assert.equal(unlinkedFeed.items[0].regionId, null);
+      assert.equal(unlinkedFeed.items[0].regionName, null);
       const r = (await get(path, ta).expect(200)).body;
       assert.equal(r.summary.sales, '3500');
       assert.equal(r.summary.orders, 6);
@@ -772,6 +780,86 @@ test('Task tags: shared visibility, collaborator progress, followers, removal an
   await req(owner, 'delete', dailyUrl).expect(200);
   assert.equal(await db.salesTaskParticipant.count({ where: { taskId: daily.id } }), 0);
   assert.equal(await db.auditLog.count({ where: { entityId: task.id, action: 'task.participants_updated' } }), 2);
+});
+
+test('Feedback October: classified orders, report drilldown, variants, company and delegated staff', async () => {
+  await db.user.update({ where:{id:admin.id},data:{mustChangePassword:false} });
+  const leadRole=await db.role.findUniqueOrThrow({where:{code:'sales_lead'}});
+  const makeUser=(email,roleId)=>db.user.create({data:{email:email+'@feedback.test',displayName:email,passwordHash:admin.passwordHash,mustChangePassword:false,...(roleId?{roleAssignments:{create:{roleId}}}:{})}});
+  const owner=await makeUser('feedback-owner',regionalRole.id), outsider=await makeUser('feedback-outsider',regionalRole.id), lead=await makeUser('feedback-lead',leadRole.id), unassigned=await makeUser('feedback-unassigned');
+  const tokens={};for(const u of [owner,outsider,lead,admin])tokens[u.id]=await mint(u.id);
+  const req=(u,method,path,body)=>{const r=http()[method]('/api/v1'+path).set('Authorization','Bearer '+tokens[u.id]);return body===undefined?r:r.send(body);};
+  const customer=await db.customer.create({data:{name:'Feedback customer',phone:'0934567821',address:'Test delivery address',createdById:owner.id,assignments:{create:{userId:owner.id,assignedById:admin.id,reason:'Feedback fixture'}}}});
+  const product=(await req(lead,'post','/catalog/products',{name:'Feedback foam',category:'Foam',description:'',variants:[{sku:'FEEDBACK-FOAM',name:'Original',unit:'tấm',price:'1000'}]}).expect(201)).body;
+  let variant=product.variants[0];
+  await req(owner,'post','/catalog/products/'+product.id+'/variants',{sku:'DENIED-ITEM',name:'Denied',unit:'tấm',price:'1000'}).expect(403);
+  const added=(await req(lead,'post','/catalog/products/'+product.id+'/variants',{sku:'FEEDBACK-RED',name:'Red',unit:'cuộn',price:'2000'}).expect(201)).body;
+  const body={requestKey:randomUUID(),customerId:customer.id,customerVersion:customer.version,items:[{variantId:variant.id,quantity:2,expectedPrice:'1000'}],salesChannel:'PAGE',salesSourceName:'Feedback Page',deliveryRegion:'CENTRAL',salesTeamName:'Team October'};
+  let order=(await req(owner,'post','/sales/orders',body).expect(201)).body;
+  assert.equal(order.deliveryRegion,'CENTRAL');assert.equal(order.salesTeamName,'Team October');
+  variant=(await req(lead,'patch','/catalog/variants/'+variant.id,{version:variant.version,sku:'FEEDBACK-BLUE',name:'Blue',unit:'thùng',price:'1500',isActive:true}).expect(200)).body;
+  await req(lead,'patch','/catalog/variants/'+variant.id,{version:variant.version-1,price:'1600',isActive:true}).expect(409);
+  const snapshot=(await req(owner,'get','/sales/orders/'+order.id).expect(200)).body.items[0];
+  assert.equal(snapshot.sku,'FEEDBACK-FOAM');assert.equal(snapshot.unit,'tấm');assert.equal(snapshot.unitPrice,'1000');
+  order=(await req(owner,'patch','/sales/orders/'+order.id+'/status',{version:order.version,status:'CONFIRMED'}).expect(200)).body;
+  const at=new Date('2025-10-10T02:00:00Z');await db.order.update({where:{id:order.id},data:{createdAt:at,shippingStatus:'DELIVERED',carrierName:'FEEDBACK CARRIER'}});
+  let meta={version:order.version,salesChannel:'ZALO',salesSourceName:'Zalo October',salesTeamName:'Team October',deliveryRegion:'HIGHLANDS',codStatus:'COLLECTED',promisedDeliveryAt:'2025-10-12T05:00:00Z',deliveredAt:'2025-10-12T06:00:00Z',reason:'Classify delivery fixture'};
+  await req(outsider,'patch','/sales/orders/'+order.id+'/metadata',meta).expect(404);
+  await req(owner,'patch','/sales/orders/'+order.id+'/metadata',{...meta,closedByUserId:outsider.id}).expect(400);
+  order=(await req(owner,'patch','/sales/orders/'+order.id+'/metadata',meta).expect(200)).body;
+  await req(owner,'patch','/sales/orders/'+order.id+'/metadata',meta).expect(409);
+  meta={...meta,version:order.version,closedByUserId:lead.id};
+  order=(await req(lead,'patch','/sales/orders/'+order.id+'/metadata',meta).expect(200)).body;
+  assert.equal(order.closedByUserId,lead.id);assert.equal(order.paidAmount,'0');
+  const query='from=2025-10-01&to=2025-10-31&source=SAKURA&salesChannel=ZALO&deliveryRegion=HIGHLANDS&team=October';
+  const report=(await req(owner,'get','/sales/reports?'+query).expect(200)).body;
+  assert.equal((await req(owner,'get','/sales/reports?'+query+'&carrier=FEEDBACK').expect(200)).body.summary.orders,1);
+  assert.equal((await req(owner,'get','/sales/reports?'+query+'&status=SAKURA:CANCELLED').expect(200)).body.summary.orders,0);
+  const productFilter=(await req(owner,'get','/sales/reports?'+query+'&product=NOT-FOUND').expect(200)).body;assert.equal(productFilter.products.length,0);assert.equal(productFilter.summary.sales,'2000');
+  assert.equal(report.summary.sales,'2000');assert.equal(report.summary.deliveredLate,1);assert.equal(report.summary.deliveredOnTime,0);
+  assert.equal(report.salesSources[0].label,'Zalo October');assert.equal(report.teams[0].label,'Team October');assert.equal(report.products[0].sku,'FEEDBACK-FOAM');assert.equal(report.products[0].quantity,'2');assert.equal(report.products[0].unit,'tấm');
+  const detail=(await req(owner,'get','/sales/reports/orders?'+query+'&metric=VALID').expect(200)).body;assert.equal(detail.total,1);assert.equal(detail.items[0].id,order.id);
+  assert.equal((await req(outsider,'get','/sales/reports/orders?'+query+'&metric=VALID').expect(200)).body.total,0);
+  assert.equal((await req(owner,'get','/sales/reports/orders?'+query+'&metric=CUSTOMERS').expect(200)).body.total,report.summary.customers);
+  await req(owner,'get','/sales/reports/orders?'+query+'&metric=WRONG').expect(400);
+  const quarterly=(await req(owner,'get','/sales/reports?'+query+'&comparisonUnit=quarter').expect(200)).body;
+  assert.equal(quarterly.comparison.length,4);assert.equal(quarterly.comparison.at(-1).partial,true);
+  const weekly=(await req(owner,'get','/sales/reports?'+query+'&comparisonUnit=week&bucket=week').expect(200)).body;assert.ok(weekly.comparison.length>=4);assert.equal(weekly.bucket,'week');
+  const calendar=(await req(owner,'get','/sales/reports?'+query+'&compareUnit=month').expect(200)).body;assert.equal(calendar.previousFrom,'2025-09-01');assert.equal(calendar.previousTo,'2025-09-30');assert.equal(calendar.previous.sales,'0');
+  assert.deepEqual(calendar.customerSegments,{once:1,repeat:0});
+  await db.historicalOrder.create({data:{externalId:'feedback-history',number:'FEEDBACK-HISTORY',customerId:customer.id,sourceStatus:'ĐÃ HOÀN THÀNH',sourcePaymentStatus:'',sourceShippingStatus:'',sourceClosedBy:'Historical closer',orderedAt:new Date('2024-01-01T03:00:00Z'),recipientName:'Test',recipientPhone:'',shippingAddress:'Test',total:100,paidAmount:100,items:[]}});
+  const customerList=(await req(owner,'get','/sales/customers?search=Feedback').expect(200)).body;
+  assert.equal(customerList.items[0].validPurchaseCount,2);
+  assert.deepEqual((await req(owner,'get','/sales/reports?'+query).expect(200)).body.customerSegments,{once:0,repeat:1});
+  for(const sourcePageId of ['feedback-page-1','feedback-page-2'])await db.order.create({data:{customerId:customer.id,createdById:owner.id,closedByUserId:owner.id,closedAt:at,status:'CONFIRMED',requestKey:randomUUID(),requestHash:'page-fixture',recipientName:'Test',recipientPhone:'',shippingAddress:'Test',subtotal:100,total:100,discount:0,shippingFee:0,createdAt:at,salesChannel:'PAGE',salesSourceName:'Same page name',sourcePageId}});
+  const pages=(await req(owner,'get','/sales/reports?from=2025-10-01&to=2025-10-31&salesChannel=PAGE').expect(200)).body.salesSources;assert.equal(pages.length,2);assert.equal(new Set(pages.map(p=>p.sourcePageId)).size,2);
+  assert.equal((await req(owner,'get','/sales/order-feed?from=2025-10-01&to=2025-10-31&salesChannel=ZALO&deliveryRegion=HIGHLANDS').expect(200)).body.total,1);
+  await req(owner,'get','/sales/order-feed?from=2025-02-30&to=2025-03-01').expect(400);
+  let company=(await req(admin,'patch','/core/company-profile',{version:0,name:'Company fixture',address:'Office fixture'}).expect(200)).body;
+  await req(owner,'patch','/core/company-profile',{version:company.version,name:'Wrong',address:'Wrong'}).expect(403);
+  // Shipment snapshot must preserve the configured sender for historical printing.
+  const slip=(await req(owner,'post','/sales/orders/'+order.id+'/delivery-slip',{version:order.version}).expect(201)).body;
+  assert.equal(slip.snapshot.company.address,'Office fixture');
+  await req(admin,'patch','/core/company-profile',{version:company.version,name:'Changed company',address:'Changed office'}).expect(200);
+  assert.equal((await req(owner,'get','/sales/orders/'+order.id+'/delivery-slip').expect(200)).body.snapshot.company.address,'Office fixture');
+  const employee=(await req(admin,'post','/core/catalogs/employees',{code:'FEEDBACK-EMP',fullName:'Employee fixture',jobTitle:'Sales',workEmail:'staff@feedback.test',phone:'0900000000'}).expect(201)).body;
+  await req(owner,'patch','/core/catalogs/employees/'+employee.id,{version:employee.version,jobTitle:'Denied',workEmail:'',phone:''}).expect(403);
+  await req(admin,'patch','/core/catalogs/employees/'+employee.id,{version:employee.version,jobTitle:'Lead',workEmail:'work@feedback.test',phone:'0900000001'}).expect(200);
+  await req(admin,'patch','/core/catalogs/employees/'+employee.id,{version:employee.version,jobTitle:'Stale',workEmail:'',phone:''}).expect(409);
+  await req(owner,'get','/sales/staff').expect(403);
+  const roster=(await req(lead,'get','/sales/staff').expect(200)).body;assert.ok(roster.some(u=>u.id===unassigned.id));assert.ok(!roster.some(u=>u.id===admin.id||u.id===lead.id));
+  await req(lead,'patch','/sales/staff/'+admin.id,{regionalSales:true}).expect(403);
+  await req(lead,'patch','/sales/staff/'+lead.id,{regionalSales:false}).expect(403);
+  await req(lead,'patch','/sales/staff/'+unassigned.id,{regionalSales:true}).expect(200);
+  assert.equal(await db.userRoleAssignment.count({where:{userId:unassigned.id,roleId:regionalRole.id}}),1);
+  await req(lead,'patch','/sales/staff/'+unassigned.id,{regionalSales:false}).expect(200);
+  const conversation=await db.chatConversation.create({data:{pageId:'feedback-page',psid:'feedback-client',supportUserId:owner.id,customerId:customer.id,lastInboundAt:new Date(Date.now()-1000)}});
+  await db.chatMessage.createMany({data:[{conversationId:conversation.id,direction:'INBOUND',state:'RECEIVED',text:'Old unanswered',remoteKey:'feedback:old',sourceAt:new Date(Date.now()-5*3600000)},{conversationId:conversation.id,direction:'INBOUND',state:'RECEIVED',text:'New follow up',remoteKey:'feedback:new',sourceAt:new Date(Date.now()-1000)}]});
+  const productivity=(await req(owner,'get','/sales/productivity?overdueHours=4').expect(200)).body;
+  assert.equal(productivity.rows.length,1);assert.equal(productivity.rows[0].late,1);assert.equal(productivity.rows[0].waitingLateRate,100);assert.equal(productivity.rows[0].overdueRate,100);
+  assert.equal((await req(owner,'get','/sales/productivity?overdueHours=6').expect(200)).body.rows[0].late,0);
+  assert.equal((await req(outsider,'get','/sales/productivity').expect(200)).body.rows[0].waiting,0);
+  await req(owner,'get','/sales/productivity?overdueHours=0').expect(400);
 });
 
 test('VNPost: secure connection, scoped tracking, concurrency and shipping reports', async (t) => {

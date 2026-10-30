@@ -3,7 +3,18 @@ import { Prisma } from '@sakura/database';
 import { Database } from '../db';
 import { hasPermission, Principal } from '../auth/policy';
 import { hashPassword } from '../auth/password';
-import { CatalogDto, CreateUserDto, EmployeeDto, PageDto, RoleDto, TelegramConfigDto, UpdateUserDto } from './dto';
+import {
+  CatalogDto,
+  CreateUserDto,
+  EmployeeDto,
+  EmployeeContactDto,
+  CompanyProfileDto,
+  PageDto,
+  RoleDto,
+  TelegramConfigDto,
+  UpdateUserDto,
+} from './dto';
+import { checkVersion } from '../common/version';
 const userSelect = {
   id: true,
   email: true,
@@ -18,6 +29,39 @@ const userSelect = {
 @Injectable()
 export class CoreService {
   constructor(private readonly db: Database) {}
+  async companyProfile() {
+    return (
+      (await this.db.companyProfile.findUnique({ where: { id: 1 } })) || {
+        id: 1,
+        name: 'Sakura',
+        address: '',
+        version: 0,
+      }
+    );
+  }
+  async saveCompanyProfile(actorId: string, dto: CompanyProfileDto) {
+    return this.db.$transaction(
+      async (tx) => {
+        const old = await tx.companyProfile.findUnique({ where: { id: 1 } });
+        checkVersion(old?.version || 0, dto.version);
+        const saved = await tx.companyProfile.upsert({
+          where: { id: 1 },
+          create: { name: dto.name.trim(), address: dto.address.trim() },
+          update: { name: dto.name.trim(), address: dto.address.trim(), version: { increment: 1 } },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'company.profile_updated',
+            entity: 'CompanyProfile',
+            entityId: '1',
+          },
+        });
+        return saved;
+      },
+      { isolationLevel: 'Serializable' },
+    );
+  }
   private async assertTargetAccess(tx: Prisma.TransactionClient, actor: Principal, userId: string) {
     if (hasPermission(actor.grants, 'core.roles.manage', 'GLOBAL')) return;
     const user = await tx.user.findUniqueOrThrow({
@@ -115,7 +159,11 @@ export class CoreService {
         }
         const user = await tx.user.update({
           where: { id },
-          data: { displayName: dto.displayName, status: dto.status, telegramChatId: dto.telegramChatId },
+          data: {
+            displayName: dto.displayName,
+            status: dto.status,
+            telegramChatId: dto.telegramChatId,
+          },
           select: userSelect,
         });
         if (dto.status === 'DISABLED')
@@ -262,6 +310,21 @@ export class CoreService {
         },
       });
       return item;
+    });
+  }
+  async employeeContact(actorId: string, id: string, dto: EmployeeContactDto) {
+    return this.db.$transaction(async (tx) => {
+      const old = await tx.employee.findUniqueOrThrow({ where: { id } });
+      checkVersion(old.version, dto.version);
+      const { version, ...data } = dto;
+      const updated = await tx.employee.update({
+        where: { id, version },
+        data: { ...data, version: { increment: 1 } },
+      });
+      await tx.auditLog.create({
+        data: { actorId, action: 'employee.updated', entity: 'Employee', entityId: id },
+      });
+      return updated;
     });
   }
   async audit(query: PageDto) {

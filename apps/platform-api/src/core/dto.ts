@@ -85,7 +85,11 @@ export class UpdateUserDto {
   telegramChatId?: string;
 }
 export class TelegramConfigDto {
-  @ApiPropertyOptional() @ValidateIf((_o, v) => v !== undefined) @IsString() @MaxLength(200) botToken?: string;
+  @ApiPropertyOptional()
+  @ValidateIf((_o, v) => v !== undefined)
+  @IsString()
+  @MaxLength(200)
+  botToken?: string;
   @ApiPropertyOptional() @ValidateIf((_o, v) => v !== undefined) @IsBoolean() enabled?: boolean;
 }
 export class ResetPasswordDto {
@@ -121,6 +125,13 @@ export class CatalogDto {
   @ApiProperty() @IsString() @MinLength(2) @MaxLength(100) name!: string;
 }
 export class EmployeeDto {
+  @ValidateIf((_o, v) => v !== undefined) @IsString() @MaxLength(150) jobTitle?: string;
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== undefined && v !== '')
+  @IsEmail()
+  @MaxLength(254)
+  workEmail?: string;
+  @ValidateIf((_o, v) => v !== undefined) @IsString() @MaxLength(30) phone?: string;
   @ApiProperty() @IsString() @Matches(/^[A-Z0-9_-]{2,30}$/) code!: string;
   @ApiProperty() @IsString() @MinLength(2) @MaxLength(100) fullName!: string;
   @ApiPropertyOptional()
@@ -139,4 +150,19 @@ export class EmployeeDto {
   @ValidateIf((_object, value) => value !== undefined)
   @IsUUID()
   regionId?: string;
+}
+export class EmployeeContactDto {
+  @IsInt() @Min(1) version!: number;
+  @IsString() @MaxLength(150) jobTitle!: string;
+  @ValidateIf((_o, v) => v !== '') @IsEmail() @MaxLength(254) workEmail!: string;
+  @IsString() @MaxLength(30) phone!: string;
+}
+export class CompanyProfileDto {
+  @IsInt() @Min(0) version!: number;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(1)
+  @MaxLength(150)
+  name!: string;
+  @IsString() @MaxLength(1000) address!: string;
 }

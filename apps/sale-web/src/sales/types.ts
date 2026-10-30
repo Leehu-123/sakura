@@ -11,6 +11,7 @@ export type Assignment = {
   endedAt: string | null;
 };
 export type Customer = {
+  validPurchaseCount?: number;
   sourceData?: Record<string, unknown>;
   id: string;
   name: string;
@@ -57,6 +58,14 @@ export type OrderItem = {
   lineTotal: string;
 };
 export type Order = {
+  salesTeamName: string;
+  salesChannel: string;
+  salesSourceName: string;
+  sourcePageId: string | null;
+  deliveryRegion: string;
+  promisedDeliveryAt: string | null;
+  deliveredAt: string | null;
+  codStatus: string;
   id: string;
   number: number;
   customer: { id: string; name: string };

@@ -152,6 +152,7 @@ test('Shipping report renders separate costs, missing counts and export', async 
     orders: 3,
     validOrders: 2,
     cancelled: 1,
+    returned: 0, returnRate: 0,
     draft: 0,
     unclassified: 0,
     sales: '100000',
@@ -182,7 +183,7 @@ test('Shipping report renders separate costs, missing counts and export', async 
     statuses: [],
     carriers: [{ ...m, label: 'VNPost' }],
   });
-  const root = await mount(SalesReport, { detailed: true, openReports: () => {} });
+  const root = await mount(SalesReport, { actor, detailed: true, openReports: () => {} });
   assert.match(node.textContent, /1 đơn chưa có phí thực trả/);
   assert.match(node.textContent, /29\.000/);
   assert.match(node.textContent, /VNPost/);
@@ -200,15 +201,20 @@ test('Monthly comparison preserves zero months, partial periods and metric switc
     { label: '2026-07', sales: '0', paid: '0', validOrders: 0, cancelled: 0, shippingCharged: '0', shippingActual: '0', shippingUnknown: 0 },
     { label: '2026-08', sales: '100000', paid: '50000', validOrders: 2, cancelled: 1, shippingCharged: '30000', shippingActual: '20000', shippingUnknown: 1 },
     { label: '2026-09', sales: '200000', paid: '60000', validOrders: 4, cancelled: 0, shippingCharged: '40000', shippingActual: '30000', shippingUnknown: 2 },
-  ] });
+  ].map(r=>({...r,returned:0,returnRate:0,shippingEstimated:'0',deliveredOnTime:0,deliveredLate:0,deliveryUnknown:0,shippingReturned:0,shippingCancelled:0})) });
   assert.equal(node.querySelectorAll('.month-column').length, 3);
   assert.match(node.textContent, /Chưa so sánh/);
   assert.doesNotMatch(node.textContent, /\+100%/);
   await click('Đơn hàng');
   assert.match(node.querySelector('thead').textContent, /Đơn hợp lệ/);
-  await click('Vận chuyển');
+  await click('Chi phí vận chuyển');
+  assert.equal(node.querySelectorAll('.month-column:first-child .month-bar').length,3);
+  assert.match(node.textContent,/Cước tạm tính/);
   assert.match(node.textContent, /Đơn chưa có phí thực trả/);
   assert.match(node.textContent, /không phải lợi nhuận/);
+  await click('Kết quả giao hàng');
+  assert.equal(node.querySelectorAll('.month-column:first-child .month-bar').length,4);
+  assert.match(node.textContent,/thiếu mốc thời gian/);
   await act(async () => root.unmount());
 });
 

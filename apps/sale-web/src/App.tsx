@@ -37,6 +37,8 @@ import { CalendarCheck, Kanban, ListTodo } from 'lucide-react';
 import { TelegramSettings } from './TelegramSettings';
 import { ShippingSettings } from './shipping/ShippingSettings';
 import { ReportAiSettings } from './sales/ReportAiSettings';
+import { EmployeeContacts, EmployeeContactFields } from './EmployeeContacts';
+import { CompanyProfile } from './CompanyProfile';
 type Grant = { permission: string; scope: string };
 type Me = {
   id: string;
@@ -67,6 +69,10 @@ type User = {
 };
 type Item = { id: string; code: string; name: string };
 type Employee = {
+  jobTitle: string;
+  workEmail: string;
+  phone: string;
+  version: number;
   id: string;
   code: string;
   fullName: string;
@@ -901,6 +907,7 @@ function Workspace({
               {(tab === 'overview' || tab === 'reports') &&
                 (me.grants.some((g) => g.permission === 'sales.reports.read') ? (
                   <SalesReport
+                    actor={me}
                     key={tab}
                     detailed={tab === 'reports'}
                     openReports={() => navigate('reports')}
@@ -1105,6 +1112,7 @@ function Workspace({
               )}
               {tab === 'catalogs' && (
                 <section className="panel">
+                  <CompanyProfile canManage={can('core.catalogs.manage')} />
                   <div className="tabs" role="tablist" aria-label="Danh mục">
                     {(
                       [
@@ -1147,7 +1155,11 @@ function Workspace({
                               <tr key={e.id}>
                                 <td>{e.code}</td>
                                 <td>
-                                  <strong>{e.fullName}</strong>
+                                  <EmployeeContacts
+                                    employee={e}
+                                    canManage={can('core.catalogs.manage')}
+                                    saved={() => setRevision((v) => v + 1)}
+                                  />
                                 </td>
                                 <td>{e.department?.name || '—'}</td>
                                 <td>{e.region?.name || '—'}</td>
@@ -1451,6 +1463,7 @@ function Workspace({
               </label>
               {catalogType === 'employees' && (
                 <>
+                  <EmployeeContactFields />
                   {(
                     [
                       ['departmentId', 'Phòng ban', catalogs.departments],

@@ -25,6 +25,7 @@ const entries: Array<[string, string, AccessScope[]]> = [
   ['sales.reports.read', 'Xem báo cáo bán hàng', ['GLOBAL', 'ASSIGNED']],
   ['sales.tasks.read', 'Xem công việc', ['GLOBAL', 'ASSIGNED']],
   ['sales.tasks.manage', 'Quản lý công việc', ['GLOBAL', 'ASSIGNED']],
+  ['sales.staff.manage', 'Cấp vai trò Sale vùng', ['GLOBAL']],
 ];
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
@@ -96,7 +97,7 @@ async function main() {
           p.code === 'catalog.products.read' ||
           (definition.code === 'sales_lead' && p.code === 'catalog.products.manage') ||
           (p.code.startsWith('sales.') &&
-            (definition.code !== 'regional_sales' || p.code !== 'sales.customers.handoff')),
+            (definition.code !== 'regional_sales' || !['sales.customers.handoff','sales.staff.manage'].includes(p.code))),
       );
       // System roles are intentionally reset to the documented baseline; custom roles remain untouched.
       await tx.rolePermission.deleteMany({ where: { roleId: role.id } });

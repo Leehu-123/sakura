@@ -19,6 +19,13 @@ import {
   shippingStatuses,
 } from './types';
 import { useResource, State, Modal, Form, Pager, SearchBox } from './shared';
+import {
+  OrderMetadata,
+  OrderSourceFields,
+  salesChannels,
+  deliveryRegions,
+  codStatuses,
+} from './OrderMetadata';
 export function CreateOrder({
   customer,
   conversationId,
@@ -116,6 +123,10 @@ export function CreateOrder({
             discount,
             shippingFee: shipping,
             note: f.get('note'),
+            salesChannel: f.get('salesChannel'),
+            salesTeamName: f.get('salesTeamName'),
+            salesSourceName: f.get('salesSourceName'),
+            deliveryRegion: f.get('deliveryRegion'),
           });
           done(result.id);
         }}
@@ -185,6 +196,7 @@ export function CreateOrder({
           Ghi chú đơn
           <textarea name="note" maxLength={2000} />
         </label>
+        <OrderSourceFields defaultChannel={conversationId ? 'PAGE' : 'UNKNOWN'} />
         <div className="order-total">
           <span>Tạm tính</span>
           <strong>{money(total)}</strong>
@@ -292,6 +304,12 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
             <ShipmentTracking
               order={order}
               actor={actor}
+              changed={() => setRevision((v) => v + 1)}
+            />
+            <OrderMetadata
+              order={order}
+              actor={actor}
+              editable={has(actor, 'sales.orders.manage')}
               changed={() => setRevision((v) => v + 1)}
             />
             {has(actor, 'sales.orders.manage') && (
@@ -420,6 +438,12 @@ export function OrderDetail({ id, actor, back }: { id: string; actor: Actor; bac
   );
 }
 type FeedOrder = {
+  validPurchaseCount: number | null;
+  salesChannel: string;
+  salesSourceName: string;
+  sourcePageId: string | null;
+  deliveryRegion: string;
+  codStatus: string;
   shippingStatus: string;
   carrierStatusLabel: string;
   carrierName: string;
@@ -431,6 +455,8 @@ type FeedOrder = {
   number: string;
   customerId: string | null;
   customerName: string;
+  regionId: string | null;
+  regionName: string | null;
   orderedAt: string;
   status: string;
   total: string;
@@ -440,6 +466,15 @@ type FeedOrder = {
   sourceCreatedBy: string;
 };
 export function Orders({ actor }: { actor: Actor }) {
+  const [filters, setFilters] = useState({
+    salesChannel: '',
+    deliveryRegion: '',
+    closer: '',
+    salesSourceName: '',
+    from: '',
+    to: '',
+  });
+  const [applied, setApplied] = useState(filters);
   const [page, setPage] = useState(1),
     [search, setSearch] = useState(''),
     [source, setSource] = useState('ALL'),
@@ -455,6 +490,7 @@ export function Orders({ actor }: { actor: Actor }) {
         source,
         status,
         link,
+        ...Object.fromEntries(Object.entries(applied).filter(([, v]) => v)),
       }),
     revision,
   );
@@ -543,6 +579,95 @@ export function Orders({ actor }: { actor: Actor }) {
           </select>
         </label>
       </div>
+      <form
+        className="sales-toolbar"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setApplied(filters);
+          setPage(1);
+        }}
+      >
+        <label>
+          Nguồn bán
+          <select
+            value={filters.salesChannel}
+            onChange={(e) => setFilters({ ...filters, salesChannel: e.target.value })}
+          >
+            <option value="">Tất cả kênh</option>
+            {Object.entries(salesChannels).map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Tên nguồn
+          <input
+            value={filters.salesSourceName}
+            maxLength={150}
+            onChange={(e) => setFilters({ ...filters, salesSourceName: e.target.value })}
+          />
+        </label>
+        <label>
+          Vùng nhận
+          <select
+            value={filters.deliveryRegion}
+            onChange={(e) => setFilters({ ...filters, deliveryRegion: e.target.value })}
+          >
+            <option value="">Tất cả vùng</option>
+            {Object.entries(deliveryRegions).map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Người chốt
+          <input
+            value={filters.closer}
+            maxLength={100}
+            onChange={(e) => setFilters({ ...filters, closer: e.target.value })}
+          />
+        </label>
+        <label>
+          Từ ngày
+          <input
+            type="date"
+            value={filters.from}
+            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+          />
+        </label>
+        <label>
+          Đến ngày
+          <input
+            type="date"
+            value={filters.to}
+            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+          />
+        </label>
+        <button className="secondary">Áp dụng bộ lọc</button>
+        <button
+          className="text-button"
+          type="button"
+          onClick={() => {
+            const empty = {
+              salesChannel: '',
+              deliveryRegion: '',
+              closer: '',
+              salesSourceName: '',
+              from: '',
+              to: '',
+            };
+            setFilters(empty);
+            setApplied(empty);
+            setPage(1);
+          }}
+        >
+          Xóa bộ lọc
+        </button>
+      </form>
       <p className="muted">
         Đơn Sakura và đơn đã nhập từ Sapo được tra cứu chung theo ngày đặt. Lập đơn mới từ hồ sơ
         khách hàng.
@@ -555,10 +680,11 @@ export function Orders({ actor }: { actor: Actor }) {
               <thead>
                 <tr>
                   <th>Mã đơn / Ngày đặt</th>
-                  <th>Nguồn</th>
+                  <th>Khu vực</th>
+                  <th>Nguồn dữ liệu / Nguồn bán</th>
                   <th>Khách hàng</th>
                   <th>Người chốt</th>
-                  <th>Trạng thái</th>
+                  <th>Trạng thái đơn hàng</th>
                   <th>Đã thu / Tổng đơn</th>
                   <th>Vận chuyển</th>
                 </tr>
@@ -573,12 +699,31 @@ export function Orders({ actor }: { actor: Actor }) {
                       <small className="block muted">{date(o.orderedAt)}</small>
                     </td>
                     <td>
+                      {deliveryRegions[o.deliveryRegion] || 'Chưa ghi nhận'}
+                      <small className="block muted">
+                        Hồ sơ khách: {o.regionName || 'Chưa phân khu vực'}
+                      </small>
+                    </td>
+                    <td>
                       <span className={'badge ' + (o.source === 'SAPO' ? 'gray' : 'green')}>
                         {o.source === 'SAPO' ? 'Sapo' : 'Sakura'}
                       </span>
+                      <small className="block">
+                        {salesChannels[o.salesChannel]} ·{' '}
+                        {o.salesSourceName || o.sourcePageId || 'Chưa có tên nguồn'}
+                      </small>
                     </td>
                     <td>
                       {o.customerName}
+                      {o.validPurchaseCount !== null && (
+                        <small className="block muted">
+                          {o.validPurchaseCount === 0
+                            ? 'Chưa có đơn hợp lệ'
+                            : o.validPurchaseCount === 1
+                              ? 'Mua một lần'
+                              : `Mua ${o.validPurchaseCount} lần`}
+                        </small>
+                      )}
                       {!o.customerId && <small className="block muted">Chưa liên kết hồ sơ</small>}
                     </td>
                     <td>
@@ -615,6 +760,7 @@ export function Orders({ actor }: { actor: Actor }) {
                         </small>
                       )}
                       {o.shippingSyncError && <small className="block">Cần kiểm tra đồng bộ</small>}
+                      <small className="block">COD: {codStatuses[o.codStatus]}</small>
                     </td>
                   </tr>
                 ))}

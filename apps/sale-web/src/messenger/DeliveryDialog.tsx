@@ -26,7 +26,7 @@ export function DeliveryDialog({ order, close }: { order: Order; close: () => vo
     voidedAt: string | null;
     currentOrderStatus: string;
     currentOrderVersion: number;
-    snapshot: Order;
+    snapshot: Order & { company?: { name: string; address: string } | null };
   };
   const [slip, setSlip] = useState<Slip | null>(null),
     [error, setError] = useState(''),
@@ -83,6 +83,7 @@ export function DeliveryDialog({ order, close }: { order: Order; close: () => vo
           <div className="delivery-print" ref={sheet}>
             <img className="slip-logo" src={logo} alt="Sakura" />
             <h2>PHIẾU GIAO HÀNG NỘI BỘ</h2>
+            <p><strong>{slip.snapshot.company?.name || 'Sakura'}</strong><br />{slip.snapshot.company?.address || 'Chưa ghi nhận địa chỉ bên bán tại lúc lập phiếu'}</p>
             <p>
               {number(slip.snapshot.number)} · {date(slip.createdAt)}
             </p>

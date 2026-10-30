@@ -3,7 +3,10 @@ import { BarChart3, Download, RefreshCw, ArrowRight } from 'lucide-react';
 import { useResource, State } from './shared';
 import { MonthlyComparison, MonthMetrics } from './MonthlyComparison';
 import { ReportAiPanel } from './ReportAiSettings';
-import { orderStatuses } from './types';
+import { orderStatuses, Actor } from './types';
+import { salesChannels, deliveryRegions } from './OrderMetadata';
+import { ReportOrders } from './ReportOrders';
+import { Productivity } from './Productivity';
 type Metrics = {
   shippingCharged: string;
   shippingEstimated: string;
@@ -28,6 +31,24 @@ type Metrics = {
 };
 type Row = Metrics & { label: string; source?: string };
 type Report = {
+  customerSegments?: { once: number; repeat: number };
+  previousFrom: string;
+  previousTo: string;
+  comparisonUnit?: string;
+  teams: Row[];
+  products: {
+    source: string;
+    deliveryRegion: string;
+    category: string;
+    productName: string;
+    sku: string;
+    unit: string;
+    quantity: string;
+    sales: string;
+    missingLines: number;
+  }[];
+  salesSources: (Row & { salesChannel: string; sourcePageId?: string | null })[];
+  deliveryRegions: Row[];
   comparison?: MonthMetrics[];
   comparisonFrom?: string;
   comparisonTo?: string;
@@ -75,9 +96,10 @@ function exportReport(d: Report) {
       r.unpaid,
     ]),
     [],
-    ['So sánh tháng', d.comparisonFrom || '', d.comparisonTo || ''],
+    ['So sánh theo kỳ', d.comparisonUnit || 'month', d.comparisonFrom || '', d.comparisonTo || ''],
     [
-      'Tháng',
+      'Kỳ',
+      'Kỳ chưa đủ ngày',
       'Đơn hợp lệ',
       'Đơn hủy',
       'Đơn hoàn',
@@ -85,11 +107,13 @@ function exportReport(d: Report) {
       'Doanh số (VND)',
       'Đã thu (VND)',
       'Phí thu khách (VND)',
+      'Cước tạm tính (VND)',
       'Phí thực trả đã biết (VND)',
       'Đơn thiếu phí thực trả',
     ],
     ...(d.comparison || []).map((r) => [
       r.label,
+      r.partial ? 'Có' : 'Không',
       r.validOrders,
       r.cancelled,
       r.returned,
@@ -97,6 +121,7 @@ function exportReport(d: Report) {
       r.sales,
       r.paid,
       r.shippingCharged,
+      r.shippingEstimated,
       r.shippingActual,
       r.shippingUnknown,
     ]),
@@ -113,6 +138,49 @@ function exportReport(d: Report) {
     [],
     ['Nguồn', 'Trạng thái', 'Số đơn', 'Giá trị đơn (VND)'],
     ...d.statuses.map((r) => [r.source, r.label, r.orders, r.value]),
+    [],
+    ['Kênh bán', 'Tên nguồn', 'Đơn hợp lệ', 'Đơn hoàn', 'Doanh số (VND)'],
+    ...(d.salesSources || []).map((r) => [
+      salesChannels[r.salesChannel] || r.salesChannel,
+      r.label,
+      r.validOrders,
+      r.returned,
+      r.sales,
+    ]),
+    [],
+    ['Nhóm kinh doanh', 'Đơn hợp lệ', 'Đơn hoàn', 'Doanh số (VND)'],
+    ...(d.teams || []).map((r) => [r.label, r.validOrders, r.returned, r.sales]),
+    [],
+    ['Vùng nhận', 'Đơn hợp lệ', 'Đơn hoàn', 'Doanh số (VND)'],
+    ...(d.deliveryRegions || []).map((r) => [
+      deliveryRegions[r.label] || r.label,
+      r.validOrders,
+      r.returned,
+      r.sales,
+    ]),
+    [],
+    [
+      'Nguồn dữ liệu',
+      'Vùng nhận',
+      'Nhóm sản phẩm hiện tại',
+      'Sản phẩm',
+      'SKU',
+      'Đơn vị',
+      'Số lượng đã biết',
+      'Tiền hàng đã biết (VND)',
+      'Dòng thiếu dữ liệu',
+    ],
+    ...(d.products || []).map((r) => [
+      r.source,
+      deliveryRegions[r.deliveryRegion] || r.deliveryRegion,
+      r.category,
+      r.productName,
+      r.sku,
+      r.unit,
+      r.quantity,
+      r.sales,
+      r.missingLines,
+    ]),
     [],
     [
       'Vận chuyển',
@@ -155,17 +223,31 @@ export function SalesReport({
   detailed = false,
   openReports,
   openAiSettings,
+  actor,
 }: {
   detailed?: boolean;
   openReports: () => void;
   openAiSettings?: () => void;
+  actor: Actor;
 }) {
   const today = localDay();
   const [from, setFrom] = useState(today.slice(0, 8) + '01'),
     [to, setTo] = useState(today),
     [source, setSource] = useState('ALL'),
     [months, setMonths] = useState('6');
-  const [query, setQuery] = useState({ from, to, source, months }),
+  const [bucket, setBucket] = useState('auto'),
+    [channel, setChannel] = useState(''),
+    [sourceText, setSourceText] = useState(''),
+    [staff, setStaff] = useState(''),
+    [region, setRegion] = useState('');
+  const [detail, setDetail] = useState<{ metric: string; title: string } | null>(null);
+  const [comparisonUnit, setComparisonUnit] = useState('month'),
+    [team, setTeam] = useState('');
+  const [compareUnit, setCompareUnit] = useState('window');
+  const [orderStatus, setOrderStatus] = useState(''),
+    [carrier, setCarrier] = useState(''),
+    [productText, setProductText] = useState('');
+  const [query, setQuery] = useState<Record<string, string>>({ from, to, source, months }),
     [revision, setRevision] = useState(0);
   const result = useResource<Report>('/sales/reports?' + new URLSearchParams(query), revision),
     d = result.data;
@@ -175,9 +257,21 @@ export function SalesReport({
     setFrom(
       days === 0
         ? end.slice(0, 8) + '01'
-        : days === -1
-          ? end.slice(0, 4) + '-01-01'
-          : localDay(new Date(Date.now() - (days - 1) * 86400000)),
+        : days === -2
+          ? localDay(
+              new Date(
+                Date.parse(end + 'T00:00:00+07:00') -
+                  ((new Date(end + 'T00:00:00Z').getUTCDay() + 6) % 7) * 86400000,
+              ),
+            )
+          : days === -3
+            ? end.slice(0, 4) +
+              '-' +
+              String(Math.floor((Number(end.slice(5, 7)) - 1) / 3) * 3 + 1).padStart(2, '0') +
+              '-01'
+            : days === -1
+              ? end.slice(0, 4) + '-01-01'
+              : localDay(new Date(Date.now() - (days - 1) * 86400000)),
     );
   }
   const growth =
@@ -201,7 +295,23 @@ export function SalesReport({
         className="panel report-filters"
         onSubmit={(e) => {
           e.preventDefault();
-          setQuery({ from, to, source, months });
+          setQuery({
+            comparisonUnit,
+            team,
+            compareUnit,
+            status: orderStatus,
+            carrier,
+            product: query.product || '',
+            from,
+            to,
+            source,
+            months,
+            bucket,
+            salesChannel: channel,
+            salesSourceName: sourceText,
+            staff,
+            deliveryRegion: region,
+          });
           setRevision((v) => v + 1);
         }}
       >
@@ -214,7 +324,7 @@ export function SalesReport({
           <input type="date" required value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
         <label>
-          Nguồn đơn
+          Nguồn dữ liệu
           <select value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="ALL">Sakura + Sapo</option>
             <option value="SAKURA">Sakura</option>
@@ -222,7 +332,38 @@ export function SalesReport({
           </select>
         </label>
         <label>
-          So sánh tháng
+          Trạng thái đơn
+          <select value={orderStatus} onChange={(e) => setOrderStatus(e.target.value)}>
+            <option value="">Tất cả</option>
+            <optgroup label="Sakura">
+              {Object.entries(orderStatuses).map(([v, t]) => (
+                <option key={v} value={'SAKURA:' + v}>
+                  {t}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Sapo">
+              {[
+                'Đang giao dịch',
+                'Đã hoàn thành',
+                'Đã hủy',
+                'Hàng hoàn',
+                'Đã lưu trữ',
+                'Đặt hàng',
+              ].map((t) => (
+                <option key={t} value={'SAPO:' + t}>
+                  {t}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </label>
+        <label>
+          Đối tác vận chuyển
+          <input value={carrier} maxLength={120} onChange={(e) => setCarrier(e.target.value)} />
+        </label>
+        <label>
+          Số tháng (khi xem theo tháng)
           <select value={months} onChange={(e) => setMonths(e.target.value)}>
             {['3', '6', '12'].map((n) => (
               <option key={n} value={n}>
@@ -231,14 +372,95 @@ export function SalesReport({
             ))}
           </select>
         </label>
+        <label>
+          Biểu đồ theo kỳ
+          <select value={comparisonUnit} onChange={(e) => setComparisonUnit(e.target.value)}>
+            <option value="month">Theo tháng</option>
+            <option value="quarter">4 quý gần nhất</option>
+            <option value="week">Các tuần của tháng kết thúc</option>
+          </select>
+        </label>
+        <label>
+          Nhóm kinh doanh
+          <input value={team} maxLength={100} onChange={(e) => setTeam(e.target.value)} />
+        </label>
+        <label>
+          Kỳ đối chiếu doanh số
+          <select value={compareUnit} onChange={(e) => setCompareUnit(e.target.value)}>
+            {[
+              ['window', 'Cùng số ngày liền trước'],
+              ['week', 'Tuần lịch trước'],
+              ['month', 'Tháng lịch trước'],
+              ['quarter', 'Quý lịch trước'],
+              ['year', 'Năm lịch trước'],
+            ].map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <small>Kỳ lịch đối chiếu tính theo ngày bắt đầu khoảng xem.</small>
+        </label>
         <button className="primary">
           <RefreshCw size={16} />
           Xem số liệu
         </button>
+        <label>
+          Đơn vị thời gian
+          <select value={bucket} onChange={(e) => setBucket(e.target.value)}>
+            {[
+              ['auto', 'Tự động'],
+              ['day', 'Ngày'],
+              ['week', 'Tuần'],
+              ['month', 'Tháng'],
+              ['quarter', 'Quý'],
+            ].map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Nguồn bán
+          <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+            <option value="">Tất cả kênh</option>
+            {Object.entries(salesChannels).map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Tên Fanpage / nguồn
+          <input
+            value={sourceText}
+            maxLength={150}
+            onChange={(e) => setSourceText(e.target.value)}
+          />
+        </label>
+        <label>
+          Người chốt
+          <input value={staff} maxLength={100} onChange={(e) => setStaff(e.target.value)} />
+        </label>
+        <label>
+          Vùng nhận
+          <select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="">Tất cả vùng</option>
+            {Object.entries(deliveryRegions).map(([v, t]) => (
+              <option key={v} value={v}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="report-presets">
           {[
             [1, 'Hôm nay'],
             [7, '7 ngày'],
+            [-2, 'Tuần này'],
+            [-3, 'Quý này'],
             [0, 'Tháng này'],
             [-1, 'Năm nay'],
           ].map(([days, label]) => (
@@ -280,7 +502,7 @@ export function SalesReport({
                 money(d.summary.sales),
                 growth === null
                   ? 'Chưa có doanh số kỳ trước để so sánh'
-                  : `${growth > 0 ? '+' : ''}${growth}% so với ${Math.round((Date.parse(d.to) - Date.parse(d.from)) / 86400000) + 1} ngày liền trước`,
+                  : `${growth > 0 ? '+' : ''}${growth}% so với ${d.previousFrom} – ${d.previousTo}`,
               ],
               [
                 'Đơn hợp lệ',
@@ -303,12 +525,32 @@ export function SalesReport({
                 percent(d.summary.returnRate),
                 'Đơn hoàn / (đơn hợp lệ + đơn hoàn) × 100',
               ],
-            ].map(([label, value, note]) => (
-              <section className="panel business-kpi" key={label}>
+            ].map(([label, value, note], index) => (
+              <button
+                type="button"
+                className="panel business-kpi"
+                key={label}
+                style={{ textAlign: 'left', cursor: 'pointer' }}
+                onClick={() =>
+                  setDetail({
+                    title: label,
+                    metric: [
+                      'VALID',
+                      'VALID',
+                      'PAID',
+                      'UNPAID',
+                      'CUSTOMERS',
+                      'CANCELLED',
+                      'RETURNED',
+                      'RETURNED',
+                    ][index],
+                  })
+                }
+              >
                 <span>{label}</span>
                 <strong>{value}</strong>
                 <small>{note}</small>
-              </section>
+              </button>
             ))}
           </div>
           {(d.summary.unclassified > 0 || d.summary.unknownPayments > 0) && (
@@ -320,12 +562,35 @@ export function SalesReport({
             </p>
           )}
           {d.comparison && (
-            <MonthlyComparison rows={d.comparison} from={d.comparisonFrom!} to={d.comparisonTo!} />
+            <MonthlyComparison
+              rows={d.comparison}
+              from={d.comparisonFrom!}
+              to={d.comparisonTo!}
+              unit={d.comparisonUnit}
+            />
           )}
           {detailed && <ReportAiPanel openSettings={openAiSettings} />}
+          {detailed && <Productivity actor={actor} />}
           <section className="panel">
             <div className="panel-head">
               <h2>Chi phí vận chuyển</h2>
+            </div>
+            <div className="sales-actions">
+              {[
+                ['SHIPPING_CHARGED', 'Đơn có phí thu khách'],
+                ['SHIPPING_ESTIMATED', 'Đơn có cước tạm tính'],
+                ['SHIPPING_ACTUAL', 'Đơn đã đối soát'],
+                ['SHIPPING_UNKNOWN', 'Đơn chưa đối soát'],
+                ['SHIPPING_COMPARABLE', 'Đơn đủ dữ liệu thu − chi'],
+              ].map(([metric, title]) => (
+                <button
+                  key={metric}
+                  className="text-button"
+                  onClick={() => setDetail({ metric, title })}
+                >
+                  {title}
+                </button>
+              ))}
             </div>
             <div className="business-kpis">
               <article className="business-kpi">
@@ -395,7 +660,17 @@ export function SalesReport({
           </section>
           <section className="panel report-chart">
             <div className="panel-head">
-              <h2>Doanh số theo {d.bucket === 'month' ? 'tháng' : 'ngày'}</h2>
+              <h2>
+                Doanh số theo{' '}
+                {
+                  (
+                    { day: 'ngày', week: 'tuần', month: 'tháng', quarter: 'quý' } as Record<
+                      string,
+                      string
+                    >
+                  )[d.bucket]
+                }
+              </h2>
               <span className="muted">VND</span>
             </div>
             {!d.timeline.length ? (
@@ -417,6 +692,120 @@ export function SalesReport({
                 ))}
               </div>
             )}
+          </section>
+          <section className="panel">
+            <h2>Theo nguồn bán hàng</h2>
+            <MetricsTable
+              rows={(d.salesSources || []).map((r) => ({
+                ...r,
+                label:
+                  (salesChannels[r.salesChannel] || r.salesChannel) +
+                  ' · ' +
+                  r.label +
+                  (r.sourcePageId ? ' (' + r.sourcePageId + ')' : ''),
+              }))}
+            />
+            <p className="muted">
+              Nguồn bán được ghi trên đơn; không tự suy ra Zalo từ khách mua lại. Kênh gốc Sapo được
+              giữ theo dữ liệu nhập.
+            </p>
+          </section>
+          <section className="panel">
+            <h2>Theo nhóm kinh doanh</h2>
+            <MetricsTable rows={d.teams || []} />
+            <p className="muted">
+              Nhóm được lưu trên từng đơn, không tự đổi theo phòng ban hiện tại của người chốt.
+            </p>
+          </section>
+          {d.customerSegments && (
+            <section className="panel">
+              <h2>Tần suất mua của khách trong kỳ</h2>
+              <p>
+                Khách mua một lần: <strong>{d.customerSegments.once}</strong> · Khách mua nhiều lần:{' '}
+                <strong>{d.customerSegments.repeat}</strong>
+              </p>
+              <p className="muted">
+                Chọn khách có đơn hợp lệ trong kỳ/bộ lọc; số lần mua tính trên toàn bộ lịch sử đơn
+                hợp lệ Sakura và Sapo của khách đó. Không tính đơn nháp, hủy, hoàn hoặc trạng thái
+                chưa rõ.
+              </p>
+            </section>
+          )}
+          {detailed && (
+            <section className="panel">
+              <h2>Sản phẩm / mã hàng theo vùng nhận</h2>
+              <form
+                className="sales-toolbar"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setQuery((current) => ({ ...current, product: productText }));
+                }}
+              >
+                <label>
+                  Tìm trong bảng sản phẩm
+                  <input
+                    value={productText}
+                    maxLength={100}
+                    onChange={(e) => setProductText(e.target.value)}
+                    placeholder="Tên nhóm, sản phẩm hoặc SKU"
+                  />
+                </label>
+                <button className="secondary">Lọc bảng sản phẩm</button>
+              </form>
+              <p className="muted">
+                Tối đa 200 nhóm có giá trị tiền hàng cao nhất; số lượng tách theo đơn vị. Tiền hàng
+                chưa trừ giảm giá toàn đơn và chưa cộng phí giao. Danh mục dùng nhóm sản phẩm hiện
+                tại, không phải nhóm lịch sử.
+              </p>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nguồn dữ liệu</th>
+                      <th>Vùng nhận</th>
+                      <th>Nhóm / Sản phẩm</th>
+                      <th>Mã hàng</th>
+                      <th>Số lượng</th>
+                      <th>Tiền hàng</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(d.products || []).map((r, i) => (
+                      <tr key={i}>
+                        <td>{sourceName(r.source)}</td>
+                        <td>{deliveryRegions[r.deliveryRegion] || r.deliveryRegion}</td>
+                        <td>
+                          {r.category}
+                          <small className="block">{r.productName}</small>
+                          {r.missingLines > 0 && (
+                            <small className="block">
+                              {r.missingLines} dòng thiếu dữ liệu số lượng/tiền
+                            </small>
+                          )}
+                        </td>
+                        <td>{r.sku || 'Chưa có mã'}</td>
+                        <td>
+                          {integer(r.quantity)} {r.unit}
+                        </td>
+                        <td>{money(r.sales)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          <section className="panel">
+            <h2>Theo vùng nhận hàng</h2>
+            <MetricsTable
+              rows={(d.deliveryRegions || []).map((r) => ({
+                ...r,
+                label: deliveryRegions[r.label] || r.label,
+              }))}
+            />
+            <p className="muted">
+              Vùng được ghi riêng trên từng đơn; đơn cũ chưa có vùng giao được để chưa ghi nhận.
+            </p>
           </section>
           <section className="panel">
             <div className="panel-head">
@@ -487,6 +876,16 @@ export function SalesReport({
             ngày nhận hàng hoàn.
           </p>
         </>
+      )}
+      {detail && (
+        <ReportOrders
+          key={JSON.stringify(query) + detail.metric}
+          query={query}
+          metric={detail.metric}
+          title={detail.title}
+          actor={actor}
+          close={() => setDetail(null)}
+        />
       )}
     </div>
   );

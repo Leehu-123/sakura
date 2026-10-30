@@ -1,5 +1,6 @@
 import { useState } from 'react';
 export type MonthMetrics = {
+  partial?: boolean;
   label: string;
   sales: string;
   paid: string;
@@ -10,6 +11,12 @@ export type MonthMetrics = {
   shippingCharged: string;
   shippingActual: string;
   shippingUnknown: number;
+  shippingEstimated: string;
+  deliveredOnTime: number;
+  deliveredLate: number;
+  deliveryUnknown: number;
+  shippingReturned: number;
+  shippingCancelled: number;
 };
 const format = (v: string | number) => new Intl.NumberFormat('vi-VN').format(BigInt(v));
 export function monthGrowth(current: string, previous?: string) {
@@ -21,32 +28,48 @@ export function MonthlyComparison({
   rows,
   from,
   to,
+  unit = 'month',
 }: {
   rows: MonthMetrics[];
   from: string;
   to: string;
+  unit?: string;
 }) {
-  const [metric, setMetric] = useState<'sales' | 'orders' | 'shipping'>('sales');
+  const [metric, setMetric] = useState<'sales' | 'orders' | 'shipping' | 'delivery'>('sales');
   const keys =
     metric === 'sales'
       ? (['sales', 'paid'] as const)
       : metric === 'orders'
-        ? (['validOrders', 'cancelled'] as const)
-        : (['shippingCharged', 'shippingActual'] as const);
+        ? (['validOrders', 'returned', 'cancelled'] as const)
+        : metric === 'delivery'
+          ? (['deliveredOnTime', 'deliveredLate', 'shippingReturned', 'shippingCancelled'] as const)
+          : (['shippingCharged', 'shippingEstimated', 'shippingActual'] as const);
   const names =
     metric === 'sales'
       ? ['Doanh số', 'Đã thu của các đơn']
       : metric === 'orders'
-        ? ['Đơn hợp lệ', 'Đơn hủy']
-        : ['Phí thu khách', 'Phí thực trả đã biết'];
+        ? ['Đơn hợp lệ', 'Đơn hoàn', 'Đơn hủy']
+        : metric === 'delivery'
+          ? ['Đã giao đúng hạn', 'Đã giao trễ hạn', 'Hoàn', 'Hủy']
+          : ['Phí thu khách', 'Cước tạm tính', 'Phí thực trả đã biết'];
+  const countMetric = metric === 'orders' || metric === 'delivery';
   const max = Math.max(1, ...rows.flatMap((r) => keys.map((k) => Number(r[k]))));
   const nextDay = new Date(Date.parse(to + 'T00:00:00Z') + 86400000).toISOString().slice(0, 7);
-  const partial = nextDay === to.slice(0, 7);
+  const partial = rows.some((r) => r.partial) || (unit === 'month' && nextDay === to.slice(0, 7));
+  const isPartial = (row: MonthMetrics) =>
+    row.partial ?? (unit === 'month' && partial && row.label === to.slice(0, 7));
+  const periodName = unit === 'quarter' ? 'quý' : unit === 'week' ? 'tuần trong tháng' : 'tháng';
+  const label = (value: string) =>
+    unit === 'quarter'
+      ? `Q${Math.floor((Number(value.slice(5, 7)) - 1) / 3) + 1}/${value.slice(0, 4)}`
+      : unit === 'week'
+        ? `Tuần ${value.slice(8, 10)}/${value.slice(5, 7)}`
+        : `${value.slice(5, 7)}/${value.slice(0, 4)}`;
   return (
     <section className="panel monthly-comparison">
       <div className="panel-head">
         <div>
-          <h2>So sánh các tháng</h2>
+          <h2>Biểu đồ kinh doanh theo {periodName}</h2>
           <p className="muted">
             {from.split('-').reverse().join('/')} – {to.split('-').reverse().join('/')} · Cùng nguồn
             đơn và phạm vi xem báo cáo
@@ -54,33 +77,31 @@ export function MonthlyComparison({
         </div>
       </div>
       <div className="month-metric-tabs" role="group" aria-label="Chỉ tiêu so sánh">
-        {(['sales', 'orders', 'shipping'] as const).map((k, i) => (
+        {(['sales', 'orders', 'shipping', 'delivery'] as const).map((k, i) => (
           <button
             key={k}
             className={metric === k ? 'primary' : 'secondary'}
             aria-pressed={metric === k}
             onClick={() => setMetric(k)}
           >
-            {['Doanh số & thu tiền', 'Đơn hàng', 'Vận chuyển'][i]}
+            {['Doanh số & thu tiền', 'Đơn hàng', 'Chi phí vận chuyển', 'Kết quả giao hàng'][i]}
           </button>
         ))}
       </div>
       <div className="month-legend">
-        <span>
-          <i />
-          {names[0]}
-        </span>
-        <span>
-          <i />
-          {names[1]}
-        </span>
-        <small>{metric === 'orders' ? 'Đơn' : 'VND'}</small>
+        {names.map((name, i) => (
+          <span key={name}>
+            <i className={'month-bar-' + i} />
+            {name}
+          </span>
+        ))}
+        <small>{countMetric ? 'Đơn' : 'VND'}</small>
       </div>
       <div className="month-chart-scroll">
         <div
           className="month-columns"
           role="img"
-          aria-label={`Biểu đồ ${names.join(' và ')} qua ${rows.length} tháng. Số liệu chi tiết trong bảng bên dưới.`}
+          aria-label={`Biểu đồ ${names.join(' và ')} qua ${rows.length} kỳ. Số liệu chi tiết trong bảng bên dưới.`}
         >
           {rows.map((r) => (
             <div className="month-column" key={r.label}>
@@ -93,7 +114,7 @@ export function MonthlyComparison({
                       height: `${(Number(r[k]) / max) * 100}%`,
                       minHeight: Number(r[k]) ? 3 : 0,
                     }}
-                    title={`${r.label} · ${names[i]}: ${format(r[k])}${metric === 'orders' ? '' : ' ₫'}`}
+                    title={`${r.label} · ${names[i]}: ${format(r[k])}${countMetric ? '' : ' ₫'}`}
                   >
                     <span>
                       {new Intl.NumberFormat('vi-VN', {
@@ -104,39 +125,37 @@ export function MonthlyComparison({
                   </div>
                 ))}
               </div>
-              <strong>
-                {r.label.slice(5)}/{r.label.slice(0, 4)}
-              </strong>
-              <small>
-                {partial && r.label === to.slice(0, 7) ? `Đến ngày ${to.slice(8)}` : 'Trọn tháng'}
-              </small>
+              <strong>{label(r.label)}</strong>
+              <small>{isPartial(r) ? 'Kỳ chưa đủ ngày' : 'Trọn kỳ'}</small>
             </div>
           ))}
         </div>
       </div>
       <p className="muted">
-        {partial && 'Tháng cuối chưa đủ ngày; không so sánh mức tăng/giảm với tháng trọn vẹn. '}
-        Tháng không có đơn trong dữ liệu được hiển thị bằng 0. Di chuột vào cột để xem giá trị.
+        {partial && 'Kỳ chưa đủ ngày được đánh dấu và không so sánh tăng/giảm với kỳ trọn vẹn. '}
+        Kỳ không có đơn được hiển thị bằng 0. Các tuần được giới hạn trong tháng đã chọn.
       </p>
       <div className="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>Tháng</th>
-              <th>{names[0]}</th>
-              <th>{names[1]}</th>
+              <th>Kỳ</th>
+              {names.map((name) => (
+                <th key={name}>{name}</th>
+              ))}
               {metric === 'orders' && (
                 <>
-                  <th>Đơn hoàn</th>
                   <th>Tỷ lệ hoàn hàng</th>
                 </>
               )}
               <th>
                 {metric === 'sales'
-                  ? 'Doanh số so tháng trước'
+                  ? 'Doanh số so kỳ trước'
                   : metric === 'orders'
-                    ? 'Đơn hợp lệ so tháng trước'
-                    : 'Đơn chưa có phí thực trả'}
+                    ? 'Đơn hợp lệ so kỳ trước'
+                    : metric === 'delivery'
+                      ? 'Đơn giao thiếu mốc thời gian'
+                      : 'Đơn chưa có phí thực trả'}
               </th>
             </tr>
           </thead>
@@ -144,22 +163,17 @@ export function MonthlyComparison({
             {rows.map((r, i) => (
               <tr key={r.label}>
                 <td>
-                  {r.label}
-                  {partial && r.label === to.slice(0, 7) && (
-                    <small className="block muted">Chưa đủ tháng</small>
-                  )}
+                  {label(r.label)}
+                  {isPartial(r) && <small className="block muted">Chưa đủ kỳ</small>}
                 </td>
-                <td>
-                  {format(r[keys[0]])}
-                  {metric !== 'orders' && ' ₫'}
-                </td>
-                <td>
-                  {format(r[keys[1]])}
-                  {metric !== 'orders' && ' ₫'}
-                </td>
+                {keys.map((key) => (
+                  <td key={key}>
+                    {format(r[key])}
+                    {!countMetric && ' ₫'}
+                  </td>
+                ))}
                 {metric === 'orders' && (
                   <>
-                    <td>{format(r.returned)}</td>
                     <td>
                       {new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(
                         r.returnRate,
@@ -169,9 +183,11 @@ export function MonthlyComparison({
                   </>
                 )}
                 <td>
-                  {metric === 'shipping'
-                    ? r.shippingUnknown
-                    : partial && r.label === to.slice(0, 7)
+                  {metric === 'shipping' || metric === 'delivery'
+                    ? metric === 'shipping'
+                      ? r.shippingUnknown
+                      : r.deliveryUnknown
+                    : isPartial(r) || (i > 0 && isPartial(rows[i - 1]))
                       ? 'Chưa so sánh'
                       : monthGrowth(
                           String(r[keys[0]]),
@@ -187,6 +203,13 @@ export function MonthlyComparison({
         <p className="note">
           Phí thực trả chỉ gồm khoản đã đối soát, kể cả đơn hủy. Chưa có phí không có nghĩa là miễn
           phí. Chênh lệch hai cột không phải lợi nhuận.
+        </p>
+      )}
+      {metric === 'delivery' && (
+        <p className="note">
+          Đúng/trễ hạn chỉ tính đơn đã giao có đủ ngày cam kết và ngày giao thực tế. Có{' '}
+          {rows.reduce((sum, r) => sum + r.deliveryUnknown, 0)} đơn đã giao thiếu mốc thời gian.
+          Trạng thái hoàn/hủy được theo dõi riêng, có thể phát sinh sau một lần giao.
         </p>
       )}
     </section>

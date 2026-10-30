@@ -13,6 +13,7 @@ export function Products({ actor }: { actor: Actor }) {
     | { kind: 'create' }
     | { kind: 'edit'; product: Product }
     | { kind: 'variant'; variant: Variant }
+    | { kind: 'add-variant'; product: Product }
     | null
   >(null);
   const [rows, setRows] = useState([0]);
@@ -75,6 +76,14 @@ export function Products({ actor }: { actor: Actor }) {
                   </div>
                 </div>
                 {p.description && <p className="product-description">{p.description}</p>}
+                {manage && (
+                  <button
+                    className="text-button"
+                    onClick={() => setModal({ kind: 'add-variant', product: p })}
+                  >
+                    Thêm mã hàng / màu
+                  </button>
+                )}
                 <SourceData data={p.sourceData} />
                 <div className="table-scroll">
                   <table>
@@ -106,7 +115,7 @@ export function Products({ actor }: { actor: Actor }) {
                                 className="text-button"
                                 onClick={() => setModal({ kind: 'variant', variant: v })}
                               >
-                                Giá & trạng thái
+                                Sửa mã hàng
                               </button>
                             </td>
                           )}
@@ -275,6 +284,9 @@ export function Products({ actor }: { actor: Actor }) {
               submit={(f) =>
                 api('/catalog/variants/' + modal.variant.id, 'PATCH', {
                   version: modal.variant.version,
+                  sku: f.get('sku'),
+                  name: f.get('name'),
+                  unit: f.get('unit'),
                   price: f.get('price'),
                   isActive: f.get('isActive') === 'true',
                 })
@@ -283,6 +295,23 @@ export function Products({ actor }: { actor: Actor }) {
               <p>
                 {modal.variant.sku} · {modal.variant.name}
               </p>
+              <label>
+                Mã hàng
+                <input
+                  name="sku"
+                  required
+                  pattern="[A-Za-z0-9_-]{2,50}"
+                  defaultValue={modal.variant.sku}
+                />
+              </label>
+              <label>
+                Tên mã / màu
+                <input name="name" required maxLength={100} defaultValue={modal.variant.name} />
+              </label>
+              <label>
+                Đơn vị
+                <input name="unit" required maxLength={30} defaultValue={modal.variant.unit} />
+              </label>
               <label>
                 Giá bán mới (đ)
                 <input
@@ -301,6 +330,37 @@ export function Products({ actor }: { actor: Actor }) {
                 </select>
               </label>
               <p className="muted">Thay đổi giá không làm thay đổi đơn đã tạo.</p>
+            </Form>
+          )}
+          {modal.kind === 'add-variant' && (
+            <Form
+              done={done}
+              submit={(f) =>
+                api('/catalog/products/' + modal.product.id + '/variants', 'POST', {
+                  sku: f.get('sku'),
+                  name: f.get('name'),
+                  unit: f.get('unit'),
+                  price: f.get('price'),
+                })
+              }
+            >
+              <p>{modal.product.name}</p>
+              <label>
+                Mã hàng
+                <input name="sku" required pattern="[A-Za-z0-9_-]{2,50}" />
+              </label>
+              <label>
+                Tên mã / màu
+                <input name="name" required maxLength={100} />
+              </label>
+              <label>
+                Đơn vị
+                <input name="unit" required maxLength={30} />
+              </label>
+              <label>
+                Giá bán (đ)
+                <input name="price" required inputMode="numeric" pattern="[0-9]{1,12}" />
+              </label>
             </Form>
           )}
         </Modal>

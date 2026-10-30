@@ -18,11 +18,13 @@ import {
   CreateOrderDto,
   OrderQuery,
   OrderStatusDto,
+  OrderMetadataDto,
   PaymentDto,
   ShippingDto,
 } from './dto';
 import { normalizePhone, orderTotals, checkTransition } from './domain';
 import { checkVersion } from '../common/version';
+import { purchaseCounts } from './purchase-counts';
 import { chatScope } from '../messenger/domain';
 import { isVnpost } from '../shipping/vnpost';
 const person = { id: true, displayName: true };
@@ -106,7 +108,16 @@ export class SalesService {
       ],
       { isolationLevel: 'RepeatableRead' },
     );
-    return { items, total, page: query.page, pageSize: query.pageSize };
+    const purchases = await purchaseCounts(
+      this.db,
+      items.map((item) => item.id),
+    );
+    return {
+      items: items.map((item) => ({ ...item, validPurchaseCount: purchases.get(item.id) || 0 })),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
   }
   async customerDetail(actor: Principal, id: string) {
     return this.transaction(async (tx) => {
@@ -399,6 +410,27 @@ export class SalesService {
       return { ...order, items, history };
     });
   }
+  orderClosers() {
+    return this.db.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        roleAssignments: {
+          some: {
+            role: {
+              permissions: {
+                some: {
+                  permission: { code: 'sales.orders.manage' },
+                  scope: { in: ['ASSIGNED', 'GLOBAL'] },
+                },
+              },
+            },
+          },
+        },
+      },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: 'asc' },
+    });
+  }
   async createOrder(actor: Principal, dto: CreateOrderDto) {
     if (new Set(dto.items.map((i) => i.variantId)).size !== dto.items.length)
       throw new BadRequestException('Mỗi biến thể chỉ được xuất hiện một lần trong đơn.');
@@ -414,6 +446,9 @@ export class SalesService {
           items: await tx.orderItem.findMany({ where: { orderId: existing.id } }),
         };
       }
+      const salesChannel = dto.salesChannel || (dto.conversationId ? 'PAGE' : 'UNKNOWN');
+      if (salesChannel === 'PAGE' && !dto.conversationId && !dto.salesSourceName?.trim())
+        throw new BadRequestException('Nhập tên Fanpage hoặc tạo đơn từ hội thoại tương ứng.');
       if (dto.conversationId) {
         const c = await tx.chatConversation.findFirst({
           where: {
@@ -467,8 +502,21 @@ export class SalesService {
       );
       const order = await tx.order.create({
         data: {
+          salesChannel,
+          salesSourceName: dto.salesSourceName?.trim() || '',
+          sourcePageId:
+            dto.conversationId && salesChannel === 'PAGE'
+              ? (
+                  await tx.chatConversation.findUniqueOrThrow({
+                    where: { id: dto.conversationId },
+                    select: { pageId: true },
+                  })
+                ).pageId
+              : null,
+          deliveryRegion: dto.deliveryRegion || 'UNKNOWN',
           requestKey: dto.requestKey,
           requestHash,
+          salesTeamName: dto.salesTeamName?.trim() || '',
           ...(dto.confirm
             ? { status: 'CONFIRMED', closedByUserId: actor.id, closedAt: new Date() }
             : {}),
@@ -546,6 +594,93 @@ export class SalesService {
           entity: 'Order',
           entityId: id,
           metadata: { from: old.status, to: dto.status, reason: dto.reason },
+        },
+      });
+      return updated;
+    });
+  }
+  async orderMetadata(actor: Principal, id: string, dto: OrderMetadataDto) {
+    return this.transaction(async (tx) => {
+      const old = await this.order(tx, actor, id, 'sales.orders.manage');
+      checkVersion(old.version, dto.version);
+      const closer = dto.closedByUserId === undefined ? old.closedByUserId : dto.closedByUserId;
+      if (closer !== old.closedByUserId) {
+        if (!hasPermission(actor.grants, 'sales.orders.manage', 'GLOBAL'))
+          throw new BadRequestException('Chỉ người quản lý đơn toàn công ty được đổi người chốt.');
+        if (!['CONFIRMED', 'COMPLETED', 'RETURNED'].includes(old.status) || !closer)
+          throw new BadRequestException(
+            'Chỉ chọn người chốt cho đơn đã chốt; không được bỏ người chốt.',
+          );
+        const eligible = await tx.user.count({
+          where: {
+            id: closer,
+            status: 'ACTIVE',
+            roleAssignments: {
+              some: {
+                role: {
+                  permissions: {
+                    some: {
+                      permission: { code: 'sales.orders.manage' },
+                      scope: { in: ['ASSIGNED', 'GLOBAL'] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+        if (!eligible)
+          throw new BadRequestException(
+            'Người chốt cần là nhân sự đang hoạt động có quyền quản lý đơn.',
+          );
+      }
+      if (dto.salesChannel === 'PAGE' && !dto.salesSourceName.trim() && !old.sourcePageId)
+        throw new BadRequestException('Nhập tên Fanpage của đơn.');
+      const data = {
+        salesChannel: dto.salesChannel,
+        salesTeamName: dto.salesTeamName?.trim() ?? old.salesTeamName,
+        salesSourceName: dto.salesSourceName.trim(),
+        sourcePageId: dto.salesChannel === 'PAGE' ? old.sourcePageId : null,
+        deliveryRegion: dto.deliveryRegion,
+        codStatus: dto.codStatus,
+        closedByUserId: closer,
+        ...(dto.promisedDeliveryAt !== undefined
+          ? { promisedDeliveryAt: dto.promisedDeliveryAt ? new Date(dto.promisedDeliveryAt) : null }
+          : {}),
+        ...(dto.deliveredAt !== undefined
+          ? { deliveredAt: dto.deliveredAt ? new Date(dto.deliveredAt) : null }
+          : {}),
+      };
+      if (data.deliveredAt && data.deliveredAt > new Date())
+        throw new BadRequestException('Ngày giao thực tế không được ở tương lai.');
+      const updated = await tx.order.update({
+        where: { id, version: dto.version },
+        data: {
+          ...data,
+          version: { increment: 1 },
+          history: { create: { actorId: actor.id, action: 'metadata_updated', note: dto.reason } },
+        },
+        include: orderInclude,
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'order.metadata_updated',
+          entity: 'Order',
+          entityId: id,
+          metadata: {
+            before: {
+              salesChannel: old.salesChannel,
+              salesSourceName: old.salesSourceName,
+              deliveryRegion: old.deliveryRegion,
+              closedByUserId: old.closedByUserId,
+              codStatus: old.codStatus,
+              promisedDeliveryAt: old.promisedDeliveryAt,
+              deliveredAt: old.deliveredAt,
+            },
+            after: data,
+            reason: dto.reason,
+          },
         },
       });
       return updated;
@@ -707,7 +842,13 @@ export class SalesService {
           where: { id: existing.id },
           data: {
             revision: { increment: 1 },
-            snapshot: JSON.parse(JSON.stringify({ ...order, items })),
+            snapshot: JSON.parse(
+              JSON.stringify({
+                ...order,
+                items,
+                company: await tx.companyProfile.findUnique({ where: { id: 1 } }),
+              }),
+            ),
             previousSnapshots: [
               ...(Array.isArray(existing.previousSnapshots) ? existing.previousSnapshots : []),
               {
@@ -744,7 +885,13 @@ export class SalesService {
         data: {
           orderId: id,
           createdById: actor.id,
-          snapshot: JSON.parse(JSON.stringify({ ...order, items })),
+          snapshot: JSON.parse(
+            JSON.stringify({
+              ...order,
+              items,
+              company: await tx.companyProfile.findUnique({ where: { id: 1 } }),
+            }),
+          ),
         },
       });
       await tx.orderHistory.create({

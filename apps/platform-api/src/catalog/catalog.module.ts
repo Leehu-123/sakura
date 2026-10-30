@@ -16,7 +16,7 @@ import { Database } from '../db';
 import { CurrentUser, RequirePermission } from '../auth/access';
 import { Principal } from '../auth/policy';
 import { PageDto } from '../core/dto';
-import { ProductDto, ProductUpdateDto, VariantUpdateDto } from './dto';
+import { ProductDto, ProductUpdateDto, VariantUpdateDto, VariantDto } from './dto';
 import { checkVersion } from '../common/version';
 @Injectable()
 export class ProductService {
@@ -110,7 +110,14 @@ export class ProductService {
         checkVersion(old.version, dto.version);
         const variant = await tx.productVariant.update({
           where: { id, version: dto.version },
-          data: { price: dto.price, isActive: dto.isActive, version: { increment: 1 } },
+          data: {
+            price: dto.price,
+            isActive: dto.isActive,
+            sku: dto.sku,
+            name: dto.name,
+            unit: dto.unit,
+            version: { increment: 1 },
+          },
         });
         await tx.auditLog.create({
           data: {
@@ -119,8 +126,14 @@ export class ProductService {
             entity: 'ProductVariant',
             entityId: id,
             metadata: {
-              before: { price: old.price.toString(), isActive: old.isActive },
-              after: { price: dto.price, isActive: dto.isActive },
+              before: {
+                price: old.price.toString(),
+                isActive: old.isActive,
+                sku: old.sku,
+                name: old.name,
+                unit: old.unit,
+              },
+              after: { ...dto },
             },
           },
         });
@@ -128,6 +141,22 @@ export class ProductService {
       },
       { isolationLevel: 'Serializable' },
     );
+  }
+  async addVariant(actor: Principal, id: string, dto: VariantDto) {
+    return this.db.$transaction(async (tx) => {
+      await tx.product.findUniqueOrThrow({ where: { id } });
+      const item = await tx.productVariant.create({ data: { ...dto, productId: id } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'variant.created',
+          entity: 'ProductVariant',
+          entityId: item.id,
+          metadata: { productId: id, sku: dto.sku },
+        },
+      });
+      return item;
+    });
   }
 }
 @ApiTags('Danh mục sản phẩm dùng chung')
@@ -166,6 +195,15 @@ class ProductController {
     @Body() dto: VariantUpdateDto,
   ) {
     return this.products.variant(actor, id, dto);
+  }
+  @Post('products/:id/variants')
+  @RequirePermission('catalog.products.manage')
+  addVariant(
+    @CurrentUser() actor: Principal,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: VariantDto,
+  ) {
+    return this.products.addVariant(actor, id, dto);
   }
 }
 @Module({ controllers: [ProductController], providers: [ProductService] })

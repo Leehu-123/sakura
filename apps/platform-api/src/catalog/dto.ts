@@ -36,6 +36,13 @@ export class VariantDto {
   price!: string;
 }
 export class VariantUpdateDto extends VersionDto {
+  @optional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @IsString()
+  @Matches(/^[A-Z0-9_-]{2,50}$/)
+  sku?: string;
+  @optional() @IsString() @MinLength(1) @MaxLength(100) name?: string;
+  @optional() @IsString() @MinLength(1) @MaxLength(30) unit?: string;
   @ApiProperty({ type: String }) @IsString() @Matches(/^\d{1,12}$/) price!: string;
   @ApiProperty() @IsBoolean() isActive!: boolean;
 }

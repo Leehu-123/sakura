@@ -3211,3 +3211,8 @@ dialog::backdrop {
   outline: 2px solid var(--primary, #db2777);
   outline-offset: -2px;
 }
+
+.month-bar-2 { background: #d97706; }
+.month-bar-3 { background: #64748b; }
+.month-legend i.month-bar-2 { background: #d97706; }
+.month-legend i.month-bar-3 { background: #64748b; }

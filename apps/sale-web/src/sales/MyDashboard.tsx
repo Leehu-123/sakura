@@ -20,6 +20,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Task } from './MyTasks';
+import { SalesStaff } from './SalesStaff';
+import { Productivity } from './Productivity';
 import {
   TaskPeopleFields,
   TaskPeopleSummary,
@@ -554,6 +556,8 @@ export function MyDashboard({
         </section>
       </div>
 
+      <SalesStaff actor={actor} />
+      <Productivity actor={actor} />
       {/* 3. RECENT ORDERS SECTION */}
       {dashboard.data &&
         (() => {
