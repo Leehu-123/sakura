@@ -17,6 +17,91 @@ const percent = (n: number | null) =>
   n === null
     ? 'Chưa có mẫu'
     : new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n) + '%';
+export function ResponseRateChart({
+  summary,
+  rows,
+}: {
+  summary: Counts;
+  rows: (Counts & { id: string | null; displayName: string | null })[];
+}) {
+  const series = [{ ...summary, id: 'total', displayName: 'Tổng thể' }, ...rows];
+  return (
+    <figure className="response-rate-chart">
+      <figcaption>Biểu đồ tỷ lệ phản hồi Messenger</figcaption>
+      <div className="response-rate-legend">
+        <span>
+          <i className="response-on-time" />
+          Đúng giờ
+        </span>
+        <span>
+          <i className="response-late" />
+          Chậm
+        </span>
+      </div>
+      <p className="muted">
+        Mỗi thanh = 100% lượt đã trả lời. Số lượt được ghi bên cạnh để đánh giá quy mô mẫu.
+      </p>
+      <div className="response-rate-scroll">
+        {series.map((r, index) => {
+          const onTime = r.answered ? (100 * r.onTime) / r.answered : 0;
+          const late = r.answered ? 100 - onTime : 0;
+          const name = r.displayName || 'Chưa xác định nhân sự';
+          return (
+            <div
+              className={'response-rate-row' + (index === 0 ? ' response-rate-total' : '')}
+              key={index === 0 ? 'total' : r.id || 'unknown'}
+            >
+              <span className="response-rate-name" title={name}>
+                {name}
+              </span>
+              <div
+                className="response-rate-bar"
+                role="img"
+                aria-label={
+                  name +
+                  ': ' +
+                  (r.answered
+                    ? 'đúng giờ ' +
+                      percent(r.onTimeRate) +
+                      ', chậm ' +
+                      percent(r.lateRate) +
+                      ', ' +
+                      r.answered +
+                      ' lượt đã trả lời'
+                    : 'Chưa có mẫu')
+                }
+              >
+                {r.answered > 0 ? (
+                  <>
+                    <span
+                      className="response-on-time"
+                      style={{ width: onTime + '%' }}
+                      title={'Đúng giờ: ' + r.onTime + ' lượt (' + percent(r.onTimeRate) + ')'}
+                    >
+                      {onTime >= 12 ? percent(r.onTimeRate) : ''}
+                    </span>
+                    <span
+                      className="response-late"
+                      style={{ width: late + '%' }}
+                      title={'Chậm: ' + r.late + ' lượt (' + percent(r.lateRate) + ')'}
+                    >
+                      {late >= 12 ? percent(r.lateRate) : ''}
+                    </span>
+                  </>
+                ) : (
+                  <span className="response-no-sample">Chưa có mẫu</span>
+                )}
+              </div>
+              <small>
+                {r.answered} lượt · Đúng giờ {percent(r.onTimeRate)} · Chậm {percent(r.lateRate)}
+              </small>
+            </div>
+          );
+        })}
+      </div>
+    </figure>
+  );
+}
 export function MessengerSlaSettings() {
   const [revision, setRevision] = useState(0),
     [saved, setSaved] = useState(false);
@@ -114,6 +199,7 @@ export function MessengerSlaPanel({
               <small>Trong {r.data.summary.pending} lượt đang chờ của kỳ</small>
             </div>
           </div>
+          <ResponseRateChart summary={r.data.summary} rows={r.data.rows} />
           <div className="table-scroll">
             <table>
               <thead>

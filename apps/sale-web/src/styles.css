@@ -3216,3 +3216,23 @@ dialog::backdrop {
 .month-bar-3 { background: #64748b; }
 .month-legend i.month-bar-2 { background: #d97706; }
 .month-legend i.month-bar-3 { background: #64748b; }
+
+.response-rate-chart { margin: 24px 0; }
+.response-rate-chart figcaption { font-weight: 700; font-size: 1.05rem; }
+.response-rate-legend { display: flex; flex-wrap: wrap; gap: 20px; margin: 12px 0; }
+.response-rate-legend span { display: inline-flex; gap: 7px; align-items: center; }
+.response-rate-legend i { width: 12px; height: 12px; border-radius: 3px; }
+.response-on-time { background: #047857; color: white; }
+.response-late { background: #b45309; color: white; }
+.response-rate-scroll { max-height: 420px; overflow: auto; }
+.response-rate-row { display: grid; grid-template-columns: minmax(100px,180px) minmax(160px,1fr); gap: 6px 16px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.response-rate-total { font-weight: 700; }
+.response-rate-name { overflow-wrap: anywhere; }
+.response-rate-row small { grid-column: 2; color: var(--muted); font-weight: 400; }
+.response-rate-bar { display: flex; height: 28px; border-radius: 5px; overflow: hidden; background: #f1f5f9; }
+.response-rate-bar > span { display: flex; align-items: center; justify-content: center; font-size: 12px; white-space: nowrap; }
+.response-rate-bar .response-no-sample { width: 100%; color: #475569; }
+@media (max-width: 600px) {
+  .response-rate-row { grid-template-columns: 1fr; }
+  .response-rate-row small { grid-column: 1; }
+}

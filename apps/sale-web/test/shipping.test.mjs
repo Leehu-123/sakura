@@ -21,7 +21,7 @@ dom.window.HTMLDialogElement.prototype.close = function () {
 const { createRoot } = await import('react-dom/client');
 const bundle = await build({
   stdin: {
-    contents: `export {MessengerSlaSettings,MessengerSlaPanel} from './src/sales/MessengerSla';export {ShipmentTracking} from './src/shipping/ShipmentTracking'; export {ShippingSettings} from './src/shipping/ShippingSettings';export {SalesReport} from './src/sales/Reports';export {MonthlyComparison,monthGrowth} from './src/sales/MonthlyComparison';export {ReportAiSettings,ReportAiPanel} from './src/sales/ReportAiSettings';`,
+    contents: `export {ResponseRateChart,MessengerSlaSettings,MessengerSlaPanel} from './src/sales/MessengerSla';export {ShipmentTracking} from './src/shipping/ShipmentTracking'; export {ShippingSettings} from './src/shipping/ShippingSettings';export {SalesReport} from './src/sales/Reports';export {MonthlyComparison,monthGrowth} from './src/sales/MonthlyComparison';export {ReportAiSettings,ReportAiPanel} from './src/sales/ReportAiSettings';`,
     resolveDir: fileURLToPath(new URL('../', import.meta.url)),
   },
   bundle: true,
@@ -53,6 +53,19 @@ const actor = {
   id: 'tester',
   grants: [{ permission: 'sales.shipments.manage', scope: 'ASSIGNED' }],
 };
+test('Response rate chart compares total and staff, preserves sample counts and empty states', async () => {
+  const counts={answered:10,onTime:8,late:2,pending:3,pendingLate:1,estimated:0,onTimeRate:80,lateRate:20};
+  const root=await mount(compiled.exports.ResponseRateChart,{summary:counts,rows:[{...counts,id:'staff',displayName:'Nhân sự A'},{...counts,id:'empty',displayName:'Nhân sự B',answered:0,onTime:0,late:0,onTimeRate:null,lateRate:null}]});
+  assert.equal(node.querySelectorAll('.response-rate-row').length,3);
+  assert.match(node.querySelector('figcaption').textContent,/tỷ lệ phản hồi/);
+  const bars=node.querySelectorAll('.response-rate-bar');
+  assert.equal(bars[0].querySelector('.response-on-time').style.width,'80%');
+  assert.equal(bars[0].querySelector('.response-late').style.width,'20%');
+  assert.match(bars[1].getAttribute('aria-label'),/10 lượt đã trả lời/);
+  assert.match(bars[2].textContent,/Chưa có mẫu/);
+  assert.equal(bars[2].querySelector('.response-on-time'),null);
+  await act(async()=>root.unmount());
+});
 test('Messenger SLA settings persist seconds and report explains 24/7 rates and pending work', async () => {
   const {MessengerSlaSettings,MessengerSlaPanel}=compiled.exports;
   const calls=[];
